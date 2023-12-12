@@ -1,7 +1,7 @@
 ---
 name: New make and model
 about: Request the creation of tracker for a specific car
-title: ''
+title: "[make] model"
 labels: new-vehicle
 assignees: jverkoey
 
