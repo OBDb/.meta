@@ -1,5 +1,11 @@
 # Cookbook
 
+## Bulk cloning all vehicle repos
+
+```
+gh repo list electricsidecar --limit 100 | grep "ElectricSidecar/" | cut -f1 | cut -d'/' -f2 | while read line; do git clone git@github.com:ElectricSidecar/$line.git; done
+```
+
 ## Bulk pushing changes to vehicle repos
 
 ```sh
