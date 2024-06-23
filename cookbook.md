@@ -1,5 +1,30 @@
 # Cookbook
 
+## Setup
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+Add brew to the profile:
+
+```bash
+(echo; echo 'eval "$(/opt/homebrew/bin/brew shellenv)"') >> /Users/fearlessdesign/.zprofile
+eval "$(/opt/homebrew/bin/brew shellenv)"
+```
+
+Install `gh`:
+
+```bash
+brew install gh
+```
+
+Log in:
+
+```bash
+gh auth login
+```
+
 ## Bulk cloning all vehicle repos
 
 ```
