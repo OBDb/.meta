@@ -40,9 +40,19 @@ gh repo list electricsidecar --limit 100 | grep "ElectricSidecar/" | cut -f1 | c
 ## Bulk updating signalset version
 
 
+```bash
+gh repo list electricsidecar --limit 100 | grep "ElectricSidecar/" | cut -f1 | cut -d'/' -f2 | grep -v ".vehicle-template" | grep -v "ElectricSidecar" | grep -v "^.github" | grep -v "^meta" | while read line; do pushd $line; cp -r ../.vehicle-template/schema/v3.json schema/v3.json; popd; done
 ```
+
+If the workflow changes:
+
+```bash
 gh repo list electricsidecar --limit 100 | grep "ElectricSidecar/" | cut -f1 | cut -d'/' -f2 | grep -v ".vehicle-template" | grep -v "ElectricSidecar" | grep -v "^.github" | grep -v "^meta" | while read line; do pushd $line; cp ../.vehicle-template/.github/workflows/json-yaml-validate.yml .github/workflows/json-yaml-validate.yml; popd; done
-gh repo list electricsidecar --limit 100 | grep "ElectricSidecar/" | cut -f1 | cut -d'/' -f2 | grep -v ".vehicle-template" | grep -v "ElectricSidecar" | grep -v "^.github" | grep -v "^meta" | while read line; do pushd $line; cp -r ../.vehicle-template/schema/ schema; popd; done
+```
+
+Commit the results:
+
+```bash
 gh repo list electricsidecar --limit 100 | grep "ElectricSidecar/" | cut -f1 | cut -d'/' -f2 | grep -v ".vehicle-template" | grep -v "ElectricSidecar" | grep -v "^.github" | grep -v "^meta" | while read line; do pushd $line; git add .; git commit -a -m "Add schema"; git push; popd; done
 ```
 
