@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Set the repository owner and total number of repositories per page
-REPO_OWNER="ElectricSidecar"
+REPO_OWNER="OBDb"
 REPO_LIMIT=1000  # Adjust this number if you need more
 
 # Function to clone or update a repo

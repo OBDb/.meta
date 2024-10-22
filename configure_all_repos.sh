@@ -11,7 +11,7 @@ for dir in */; do
 
         gh repo edit --enable-auto-merge --delete-branch-on-merge --enable-merge-commit=false --enable-rebase-merge=false
 
-        gh api -X PUT /repos/ElectricSidecar/$dir_name/branches/main/protection --input - <<EOF
+        gh api -X PUT /repos/OBDb/$dir_name/branches/main/protection --input - <<EOF
 {
   "required_status_checks": {
     "strict": true,

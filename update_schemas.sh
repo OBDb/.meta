@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Excluded directories
-EXCLUDES=( ".vehicle-template" "ElectricSidecar" ".github" "meta" )
+EXCLUDES=( ".vehicle-template" ".github" "meta" )
 
 # Enumerate all subdirectories in the current directory
 for dir in */; do
