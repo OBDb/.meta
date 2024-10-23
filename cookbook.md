@@ -25,16 +25,12 @@ Log in:
 gh auth login
 ```
 
+All subsequent commands should be ran from the parent folder of this `meta/` repo.
+
 ## Bulk cloning all vehicle repos
 
 ```
-gh repo list electricsidecar --limit 100 | grep "ElectricSidecar/" | cut -f1 | cut -d'/' -f2 | while read line; do git clone git@github.com:ElectricSidecar/$line.git; done
-```
-
-## Update all repos
-
-```
-gh repo list electricsidecar --limit 100 | grep "ElectricSidecar/" | cut -f1 | cut -d'/' -f2 | while read line; do pushd $line; git fetch; git rebase origin/main; popd; done
+./meta/update_all.sh
 ```
 
 ## Bulk updating signalset version
