@@ -16,8 +16,7 @@ for dir in */; do
   "required_status_checks": {
     "strict": true,
     "contexts": [
-      "json-yaml-validate",
-      "json-yaml-validate-meta"
+      "validate-signals"
     ]
   },
   "enforce_admins": true,
