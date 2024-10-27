@@ -14,8 +14,28 @@ process_repo() {
         # Check if the working directory is clean
         if [ -z "$(git status --porcelain)" ]; then
             echo "No local changes in $repo_name. Fetching latest changes."
-            git fetch origin
-            git rebase origin/main
+            git fetch origin -p
+            
+            # Check if we're on wip branch
+            current_branch=$(git rev-parse --abbrev-ref HEAD)
+            if [ "$current_branch" = "wip" ]; then
+                # Get the latest main branch commit
+                git fetch origin main:main
+                main_commit=$(git rev-parse main)
+                wip_commit=$(git rev-parse wip)
+                
+                # Compare if wip and main are at the same commit
+                if [ "$main_commit" = "$wip_commit" ]; then
+                    echo "WIP branch is identical to main. Switching to main and cleaning up."
+                    git checkout main
+                    git branch -D wip
+                else
+                    echo "WIP branch has unique commits. Rebasing against main."
+                    git rebase origin/main
+                fi
+            else
+                git rebase origin/main
+            fi
         else
             echo "Local changes detected in $repo_name. Skipping fetch and rebase."
         fi

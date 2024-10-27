@@ -1,13 +1,12 @@
 #!/bin/bash
 
 # Excluded directories
-EXCLUDES=( ".vehicle-template" ".github" "meta" )
+EXCLUDES=( ".vehicle-template" ".github" ".meta" ".schemas" )
 
 # Enumerate all subdirectories in the current directory
 for dir in */; do
     dir_name="${dir%/}"  # Remove trailing slash
 
-    # Check if the directory is excluded
     # Check if the directory is in the exclude list
     skip=false
     for exclude in "${EXCLUDES[@]}"; do
@@ -26,8 +25,8 @@ for dir in */; do
     echo "Synchronizing schema to: $dir_name"
     pushd "$dir_name" || exit
 
-    # Use rsync to synchronize the schema directory
-    rsync -a --delete --exclude='.git/' --exclude='schema/' "../.vehicle-template/schema/" schema/
+    rm -rf schema/
+    # Use rsync to synchronize the presubmits directory
     rsync -a --delete --exclude='.git/' --exclude='.github/' "../.vehicle-template/.github/" .github/
     
     popd || exit
