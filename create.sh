@@ -31,8 +31,7 @@ gh api -X PUT /repos/OBDb/$REPO_NAME/branches/main/protection --input - <<EOF
   "required_status_checks": {
     "strict": true,
     "contexts": [
-      "json-yaml-validate",
-      "json-yaml-validate-meta"
+      "validate-signals"
     ]
   },
   "enforce_admins": true,
