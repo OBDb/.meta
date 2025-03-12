@@ -108,8 +108,6 @@ def process_repositories(org_name, workspace_dir, files_to_copy, exclude_prefixe
         print("No repositories found to process.")
         return {}
 
-    print(f"Found {len(repo_paths)} repositories to process")
-
     # Determine optimal number of workers based on CPU cores
     num_workers = min(32, multiprocessing.cpu_count() * 2)  # Cap at 32 workers
 

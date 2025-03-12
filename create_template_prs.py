@@ -460,6 +460,8 @@ def create_pr_for_repo(repo_path, branch_name, commit_message, pr_title=None, dr
                     print(f"  $ {cmd}")
                 return repo_name, True, "Dry run completed"
 
+            time.sleep(5)
+
             # Create PR with retries
             print(f"  $ gh pr create --base main --head {branch_name} --title \"{pr_title}\" --body \"\"")
             try:
