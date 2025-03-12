@@ -1,0 +1,18 @@
+{
+  "required_status_checks": {
+    "strict": true,
+    "contexts": [
+      "validate-signals",
+      "test"
+    ]
+  },
+  "enforce_admins": true,
+  "required_pull_request_reviews": {
+    "require_code_owner_reviews": false,
+    "required_approving_review_count": 0
+  },
+  "restrictions": null,
+  "allow_force_pushes": false,
+  "block_creations": true,
+  "block_deletions": true
+}
