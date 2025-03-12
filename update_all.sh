@@ -15,7 +15,7 @@ process_repo() {
         if [ -z "$(git status --porcelain)" ]; then
             echo "No local changes in $repo_name. Fetching latest changes."
             git fetch origin -p
-            
+
             # Check if we're on wip branch
             current_branch=$(git rev-parse --abbrev-ref HEAD)
             if [ "$current_branch" = "wip" ]; then
@@ -23,7 +23,7 @@ process_repo() {
                 git fetch origin main:main
                 main_commit=$(git rev-parse main)
                 wip_commit=$(git rev-parse wip)
-                
+
                 # Compare if wip and main are at the same commit
                 if [ "$main_commit" = "$wip_commit" ]; then
                     echo "WIP branch is identical to main. Switching to main and cleaning up."

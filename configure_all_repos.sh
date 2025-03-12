@@ -34,7 +34,8 @@ for dir in */; do
   "required_status_checks": {
     "strict": true,
     "contexts": [
-      "validate-signals"
+      "validate-signals",
+      "test",
     ]
   },
   "enforce_admins": true,
