@@ -149,7 +149,23 @@ def load_model_year_data(repo_dir, make, model):
         print(f"Error loading model year data for {make}-{model}: {e}")
         return None
 
-def merge_signalsets(signalset_files, make, model):
+def replace_signal_prefix(signal_id, make, model, new_prefix):
+    """
+    Replace the vehicle-specific prefix of a signal ID with a new prefix.
+    Example: 'RAV4_VSS' becomes 'TOYOTA_VSS' if new_prefix is 'TOYOTA'
+    """
+    if not signal_id or not new_prefix:
+        return signal_id
+
+    # Try to identify the original prefix by finding the first underscore
+    if '_' in signal_id:
+        # Replace everything before the first underscore with the new prefix
+        return f"{new_prefix}{signal_id[signal_id.find('_'):]}"
+    else:
+        # If no underscore exists, just prepend the prefix with an underscore
+        return f"{new_prefix}_{signal_id}"
+
+def merge_signalsets(signalset_files, make, model, signal_prefix=None):
     """
     Merge multiple signalset files into a single unified signalset structure.
     Combines commands and signals from all input files.
@@ -160,7 +176,6 @@ def merge_signalsets(signalset_files, make, model):
 
     # Track commands by their unique identifier (combination of hdr/eax/pid)
     command_map = {}
-    signal_groups_map = {}
 
     for signalset_path in signalset_files:
         with open(signalset_path) as f:
@@ -186,6 +201,19 @@ def merge_signalsets(signalset_files, make, model):
             pid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
             cmd_id = f"{hdr}:{eax}:{pid}"
 
+            # Process signals and replace their prefix if needed
+            if signal_prefix and 'signals' in cmd:
+                for signal in cmd['signals']:
+                    original_id = signal.get('id', '')
+                    if original_id:
+                        # Replace the prefix in the signal ID
+                        new_id = replace_signal_prefix(original_id, make, model, signal_prefix)
+                        signal['id'] = new_id
+
+                        # Also update the 'name' field if it looks like it contains the ID
+                        if 'name' in signal and original_id in signal['name']:
+                            signal['name'] = signal['name'].replace(original_id, new_id)
+
             if cmd_id in command_map:
                 # Merge signals if command already exists
                 existing_cmd = command_map[cmd_id]
@@ -208,7 +236,7 @@ def calculate_hash(data):
     data_str = json.dumps(data, sort_keys=True)
     return hashlib.sha256(data_str.encode()).hexdigest()
 
-def extract_data(workspace_dir, output_dir, force=False, filter_prefix=None):
+def extract_data(workspace_dir, output_dir, force=False, filter_prefix=None, signal_prefix=None):
     """Extract and merge signalset data from all repositories."""
     merged_signalset = {
         "commands": []
@@ -266,7 +294,8 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefix=None):
         repo_signalset = merge_signalsets(
             repo_data["files"],
             repo_data["make"],
-            repo_data["model"]
+            repo_data["model"],
+            signal_prefix
         )
 
         # Merge into the global signalset
@@ -366,6 +395,7 @@ def main():
     parser.add_argument('--fetch', action='store_true', help='Fetch/update repositories before extraction')
     parser.add_argument('--force', action='store_true', help='Force update even if no changes detected')
     parser.add_argument('--filter-prefix', help='Filter repositories to only those with the specified prefix')
+    parser.add_argument('--signal-prefix', help='Replace vehicle-specific signal ID prefixes with this prefix')
     args = parser.parse_args()
 
     # Only clone/update repositories if --fetch is specified
@@ -378,7 +408,11 @@ def main():
 
     # Extract data from the repositories
     print("Extracting data from repositories...")
-    extract_data(args.workspace, args.output, args.force, args.filter_prefix)
+    extract_data(workspace_dir=args.workspace,
+                output_dir=args.output,
+                force=args.force,
+                filter_prefix=args.filter_prefix,
+                signal_prefix=args.signal_prefix)
 
     print(f"Data extraction complete. The JSON file is ready for use in the React application.")
 
