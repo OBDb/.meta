@@ -611,19 +611,39 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, s
                     global_command_origins[cmd_id].append(cmd_source)
 
             # Merge into the global signalset
-            # Add commands
-            existing_cmd_ids = {
-                f"{cmd.get('hdr', '')}:{cmd.get('eax', '')}:{list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''}"
-                for cmd in merged_signalset["commands"]
-            }
+            # Create a mapping of command IDs to commands in the merged signalset
+            command_map = {}
+            for idx, cmd in enumerate(merged_signalset["commands"]):
+                hdr = cmd.get('hdr', '')
+                eax = cmd.get('eax', '')
+                pid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
+                cmd_id = f"{hdr}:{eax}:{pid}"
+                command_map[cmd_id] = idx
 
+            # Add commands or merge signals for existing commands
             for cmd in repo_signalset["commands"]:
                 hdr = cmd.get('hdr', '')
                 eax = cmd.get('eax', '')
                 pid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
                 cmd_id = f"{hdr}:{eax}:{pid}"
 
-                if cmd_id not in existing_cmd_ids:
+                if cmd_id in command_map:
+                    # Command exists, merge signals
+                    existing_cmd = merged_signalset["commands"][command_map[cmd_id]]
+
+                    # Create a set of existing signal IDs for faster lookup
+                    existing_signal_ids = {s.get('id') for s in existing_cmd.get('signals', [])}
+
+                    # Add any new signals from this command
+                    for signal in cmd.get('signals', []):
+                        signal_id = signal.get('id')
+                        if signal_id and signal_id not in existing_signal_ids:
+                            if 'signals' not in existing_cmd:
+                                existing_cmd['signals'] = []
+                            existing_cmd['signals'].append(signal)
+                            existing_signal_ids.add(signal_id)
+                else:
+                    # Command doesn't exist, add it
                     merged_signalset["commands"].append(cmd)
 
     # Print summary of all repositories processed
