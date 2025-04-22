@@ -493,107 +493,141 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, s
     model_years_output_path = Path(output_dir) / 'model_years_data.json'
     provenance_report_path = Path(output_dir) / 'signal_provenance_report.json'
 
-    all_signalsets = {}  # Organize by make-model
+    # Organize repositories by filter priority
+    all_repos = {}  # Key: repo name, Value: repo data
 
-    # Process each repository
-    for repo_dir in Path(workspace_dir).iterdir():
-        if not repo_dir.is_dir():
-            continue
+    # Process each repository and group by matching filter
+    repo_groups = []
 
-        # Skip repositories that don't match any prefix filter if specified
-        if filter_prefixes and not any(repo_dir.name.startswith(prefix) for prefix in filter_prefixes):
-            continue
+    # If no filters specified, create a single group with all repositories
+    if not filter_prefixes:
+        repo_groups.append([])  # Single group with no filter
+    else:
+        # Create a group for each filter, preserving order
+        for prefix in filter_prefixes:
+            repo_groups.append([prefix])
 
-        signalsets_dir = repo_dir / 'signalsets' / 'v3'
-        if not signalsets_dir.exists():
-            print(f"No signalset directory found for {repo_dir.name}, skipping...")
-            continue
+    for group_idx, group_filters in enumerate(repo_groups):
+        repos_in_group = {}  # Reset for each filter group
 
-        # Extract make and model from repo name
-        make, model = repo_dir.name.split('-', 1) if '-' in repo_dir.name else (repo_dir.name, '')
+        # Process each repository for the current filter group
+        for repo_dir in Path(workspace_dir).iterdir():
+            if not repo_dir.is_dir():
+                continue
 
-        print(f"Processing {make} {model}...")
+            # Skip repositories that don't match the current filter group
+            if group_filters:  # If we have filters in this group
+                if not any(repo_dir.name.startswith(prefix) for prefix in group_filters):
+                    continue
 
-        # Find all signalset files in the v3 directory
-        signalset_files = list(signalsets_dir.glob('*.json'))
+            # Skip repositories already processed by previous filter groups
+            if repo_dir.name in all_repos:
+                continue
 
-        if not signalset_files:
-            print(f"No signalset files found for {make} {model}, skipping...")
-            continue
+            signalsets_dir = repo_dir / 'signalsets' / 'v3'
+            if not signalsets_dir.exists():
+                print(f"No signalset directory found for {repo_dir.name}, skipping...")
+                continue
 
-        # Store all signalset files for this make-model
-        all_signalsets[f"{make}-{model}"] = {
-            "files": signalset_files,
-            "make": make,
-            "model": model
-        }
+            # Extract make and model from repo name
+            make, model = repo_dir.name.split('-', 1) if '-' in repo_dir.name else (repo_dir.name, '')
 
-        # Check for model year PID support data
-        my_data = load_model_year_data(repo_dir, make, model)
-        if my_data:
-            model_year_data.append(my_data)
-            print(f"  Found model year PID data for {make} {model}")
+            # Find all signalset files in the v3 directory
+            signalset_files = list(signalsets_dir.glob('*.json'))
 
-    # Merge all signalsets in a sorted order for consistent output between runs
-    for repo_key in sorted(all_signalsets.keys()):
-        repo_data = all_signalsets[repo_key]
-        print(f"Merging signalsets for {repo_key}...")
-        repo_signalset = merge_signalsets(
-            repo_data["files"],
-            repo_data["make"],
-            repo_data["model"],
-            signal_prefix
-        )
+            if not signalset_files:
+                print(f"No signalset files found for {make} {model}, skipping...")
+                continue
 
-        # Track signal origins from this repo
-        if "_signal_origins" in repo_signalset:
-            for signal_id, sources in repo_signalset["_signal_origins"].items():
-                if signal_id not in global_signal_origins:
-                    global_signal_origins[signal_id] = []
-                global_signal_origins[signal_id].extend(sources)
-
-            # Remove the signal origins metadata from the repo signalset before merging
-            del repo_signalset["_signal_origins"]
-
-        # Process and track commands from this repo
-        for cmd in repo_signalset.get("commands", []):
-            hdr = cmd.get('hdr', '')
-            eax = cmd.get('eax', '')
-            pid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
-            cmd_id = f"{hdr}:{eax}:{pid}"
-
-            # Build command source information
-            cmd_source = {
-                "repo": repo_key,
-                "make": repo_data["make"],
-                "model": repo_data["model"],
-                "description": cmd.get("description", ""),
-                "file": "combined" # Since commands come from merged signalsets
+            # Store all signalset files for this make-model
+            repos_in_group[repo_dir.name] = {
+                "files": signalset_files,
+                "make": make,
+                "model": model
             }
 
-            # Track command origins
-            if cmd_id not in global_command_origins:
-                global_command_origins[cmd_id] = []
+            # Also add to our master list of repositories
+            all_repos[repo_dir.name] = {
+                "files": signalset_files,
+                "make": make,
+                "model": model,
+                "priority": group_idx  # Track which filter group this repo matched
+            }
 
-            # Only add if this repo isn't already in the sources for this command
-            if not any(src["repo"] == repo_key for src in global_command_origins[cmd_id]):
-                global_command_origins[cmd_id].append(cmd_source)
+            # Check for model year PID support data
+            my_data = load_model_year_data(repo_dir, make, model)
+            if my_data:
+                model_year_data.append(my_data)
+                print(f"  Found model year PID data for {make} {model}")
 
-        # Merge into the global signalset
-        # Add commands
-        existing_cmd_ids = {
-            f"{cmd.get('hdr', '')}:{cmd.get('eax', '')}:{list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''}"
-            for cmd in merged_signalset["commands"]
-        }
+        # Print summary of repos found in this filter group
+        filter_desc = ", ".join(group_filters) if group_filters else "all repositories"
+        print(f"Processing filter group {group_idx+1}: {filter_desc} ({len(repos_in_group)} repositories)")
 
-        for cmd in repo_signalset["commands"]:
-            hdr = cmd.get('hdr', '')
-            eax = cmd.get('eax', '')
-            pid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
-            cmd_id = f"{hdr}:{eax}:{pid}"
+        # Process repositories within this filter group in a sorted order
+        for repo_name in sorted(repos_in_group.keys()):
+            repo_data = repos_in_group[repo_name]
+            print(f"Merging signalsets for {repo_name}...")
+            repo_signalset = merge_signalsets(
+                repo_data["files"],
+                repo_data["make"],
+                repo_data["model"],
+                signal_prefix
+            )
 
-            if cmd_id not in existing_cmd_ids:
-                merged_signalset["commands"].append(cmd)
+            # Track signal origins from this repo
+            if "_signal_origins" in repo_signalset:
+                for signal_id, sources in repo_signalset["_signal_origins"].items():
+                    if signal_id not in global_signal_origins:
+                        global_signal_origins[signal_id] = []
+                    global_signal_origins[signal_id].extend(sources)
+
+                # Remove the signal origins metadata from the repo signalset before merging
+                del repo_signalset["_signal_origins"]
+
+            # Process and track commands from this repo
+            for cmd in repo_signalset.get("commands", []):
+                hdr = cmd.get('hdr', '')
+                eax = cmd.get('eax', '')
+                pid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
+                cmd_id = f"{hdr}:{eax}:{pid}"
+
+                # Build command source information
+                cmd_source = {
+                    "repo": repo_name,
+                    "make": repo_data["make"],
+                    "model": repo_data["model"],
+                    "description": cmd.get("description", ""),
+                    "file": "combined", # Since commands come from merged signalsets
+                    "priority": all_repos[repo_name]["priority"]  # Track priority of this source
+                }
+
+                # Track command origins
+                if cmd_id not in global_command_origins:
+                    global_command_origins[cmd_id] = []
+
+                # Only add if this repo isn't already in the sources for this command
+                if not any(src["repo"] == repo_name for src in global_command_origins[cmd_id]):
+                    global_command_origins[cmd_id].append(cmd_source)
+
+            # Merge into the global signalset
+            # Add commands
+            existing_cmd_ids = {
+                f"{cmd.get('hdr', '')}:{cmd.get('eax', '')}:{list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''}"
+                for cmd in merged_signalset["commands"]
+            }
+
+            for cmd in repo_signalset["commands"]:
+                hdr = cmd.get('hdr', '')
+                eax = cmd.get('eax', '')
+                pid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
+                cmd_id = f"{hdr}:{eax}:{pid}"
+
+                if cmd_id not in existing_cmd_ids:
+                    merged_signalset["commands"].append(cmd)
+
+    # Print summary of all repositories processed
+    print(f"\nProcessed {len(all_repos)} repositories in {len(repo_groups)} filter groups")
 
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
