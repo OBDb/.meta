@@ -295,8 +295,9 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, s
             model_year_data.append(my_data)
             print(f"  Found model year PID data for {make} {model}")
 
-    # Merge all signalsets
-    for repo_key, repo_data in all_signalsets.items():
+    # Merge all signalsets in a sorted order for consistent output between runs
+    for repo_key in sorted(all_signalsets.keys()):
+        repo_data = all_signalsets[repo_key]
         print(f"Merging signalsets for {repo_key}...")
         repo_signalset = merge_signalsets(
             repo_data["files"],
