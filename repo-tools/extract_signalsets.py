@@ -349,7 +349,8 @@ def generate_provenance_report(signal_origins, cmd_origins, output_path):
                     "repo": source["repo"],
                     "make": source["make"],
                     "model": source["model"],
-                    "file": source.get("file", "unknown")
+                    "file": source.get("file", "unknown"),
+                    "url": f"https://github.com/OBDb/{source['repo']}/blob/main/signalsets/v3/{source.get('file', 'default.json')}"
                 }
                 for source in sources
             ]
@@ -365,7 +366,8 @@ def generate_provenance_report(signal_origins, cmd_origins, output_path):
                     "signalCount": 0,
                     "commandCount": 0,
                     "signals": [],
-                    "commands": []
+                    "commands": [],
+                    "url": f"https://github.com/OBDb/{repo_name}/blob/main/signalsets/v3/default.json"
                 }
 
             if signal_id not in report["repoContributions"][repo_name]["signals"]:
@@ -380,7 +382,8 @@ def generate_provenance_report(signal_origins, cmd_origins, output_path):
                     "repo": source["repo"],
                     "make": source["make"],
                     "model": source["model"],
-                    "file": source.get("file", "unknown")
+                    "file": source.get("file", "unknown"),
+                    "url": f"https://github.com/OBDb/{source['repo']}/blob/main/signalsets/v3/{source.get('file', 'default.json')}"
                 }
                 for source in sources
             ],
@@ -397,7 +400,8 @@ def generate_provenance_report(signal_origins, cmd_origins, output_path):
                     "signalCount": 0,
                     "commandCount": 0,
                     "signals": [],
-                    "commands": []
+                    "commands": [],
+                    "url": f"https://github.com/OBDb/{repo_name}/blob/main/signalsets/v3/default.json"
                 }
 
             if cmd_id not in report["repoContributions"][repo_name]["commands"]:
@@ -426,7 +430,9 @@ def generate_provenance_report(signal_origins, cmd_origins, output_path):
 
     for repo_name, data in sorted_repos:
         total = data["signalCount"] + data["commandCount"]
-        summary.append(f"| {repo_name} | {data['make']} | {data['model']} | {data['signalCount']} | {data['commandCount']} | {total} |")
+        # Create markdown link to the repository
+        repo_link = f"[{repo_name}]({data['url']})"
+        summary.append(f"| {repo_link} | {data['make']} | {data['model']} | {data['signalCount']} | {data['commandCount']} | {total} |")
 
     # Add detailed signal provenance section
     summary.append("\n## Signal Provenance")
@@ -442,7 +448,23 @@ def generate_provenance_report(signal_origins, cmd_origins, output_path):
     )[:30]  # Limit to top 30
 
     for signal_id, data in sorted_signals:
-        repo_list = ", ".join(sorted(set(src["repo"] for src in data["sources"])))
+        # Create list of repo links
+        repo_links = []
+        for src in data["sources"]:
+            repo_name = src["repo"]
+            repo_url = src["url"]
+            repo_links.append(f"[{repo_name}]({repo_url})")
+        
+        # Join unique links with commas
+        unique_links = []
+        seen_repos = set()
+        for link in repo_links:
+            repo_name = link[link.find('[')+1:link.find(']')]
+            if repo_name not in seen_repos:
+                unique_links.append(link)
+                seen_repos.add(repo_name)
+                
+        repo_list = ", ".join(unique_links)
         summary.append(f"| `{signal_id}` | {repo_list} | {len(data['sources'])} |")
 
     # Add detailed command provenance section
@@ -459,7 +481,23 @@ def generate_provenance_report(signal_origins, cmd_origins, output_path):
     )[:30]  # Limit to top 30
 
     for cmd_id, data in sorted_commands:
-        repo_list = ", ".join(sorted(set(src["repo"] for src in data["sources"])))
+        # Create list of repo links
+        repo_links = []
+        for src in data["sources"]:
+            repo_name = src["repo"]
+            repo_url = src["url"]
+            repo_links.append(f"[{repo_name}]({repo_url})")
+        
+        # Join unique links with commas
+        unique_links = []
+        seen_repos = set()
+        for link in repo_links:
+            repo_name = link[link.find('[')+1:link.find(']')]
+            if repo_name not in seen_repos:
+                unique_links.append(link)
+                seen_repos.add(repo_name)
+                
+        repo_list = ", ".join(unique_links)
         description = data["description"][:50] + "..." if len(data["description"]) > 50 else data["description"]
         summary.append(f"| `{cmd_id}` | {description} | {repo_list} | {len(data['sources'])} |")
 
