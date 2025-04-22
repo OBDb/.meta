@@ -201,6 +201,10 @@ def merge_signalsets(signalset_files, make, model, signal_prefix=None):
             pid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
             cmd_id = f"{hdr}:{eax}:{pid}"
 
+            # Ensure debug flag exists
+            if 'dbg' not in cmd:
+                cmd['dbg'] = True
+
             # Process signals and replace their prefix if needed
             if signal_prefix and 'signals' in cmd:
                 for signal in cmd['signals']:
