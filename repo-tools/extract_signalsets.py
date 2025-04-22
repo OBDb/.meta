@@ -168,6 +168,25 @@ def replace_signal_prefix(signal_id, make, model, new_prefix):
         # If no underscore exists, just prepend the prefix with an underscore
         return f"{new_prefix}_{signal_id}"
 
+def are_signals_equal(signal1, signal2):
+    """
+    Compare two signal definitions to determine if they are functionally equal.
+    Ignores ID field since that's what we're checking conflicts for.
+    """
+    # Create copies and remove 'id' field for comparison
+    s1_compare = signal1.copy()
+    s2_compare = signal2.copy()
+
+    # Fields that shouldn't affect equality comparison
+    exclude_fields = ['id', 'name', 'description', 'path', 'comment']
+
+    for field in exclude_fields:
+        s1_compare.pop(field, None)
+        s2_compare.pop(field, None)
+
+    # Compare core definition attributes
+    return json.dumps(s1_compare, sort_keys=True) == json.dumps(s2_compare, sort_keys=True)
+
 def merge_signalsets(signalset_files, make, model, signal_prefix=None):
     """
     Merge multiple signalset files into a single unified signalset structure.
@@ -179,6 +198,10 @@ def merge_signalsets(signalset_files, make, model, signal_prefix=None):
 
     # Track commands by their unique identifier (combination of hdr/eax/pid)
     command_map = {}
+
+    # Track signals by their ID to detect conflicts
+    signal_registry = {}  # Maps signal ID to its definition
+    signal_versions = {}  # Tracks version numbers for signals with same base ID
 
     for signalset_path in signalset_files:
         with open(signalset_path) as f:
@@ -209,17 +232,57 @@ def merge_signalsets(signalset_files, make, model, signal_prefix=None):
                 cmd['dbg'] = True
 
             # Process signals and replace their prefix if needed
-            if signal_prefix and 'signals' in cmd:
+            if 'signals' in cmd:
+                new_signals = []
                 for signal in cmd['signals']:
                     original_id = signal.get('id', '')
-                    if original_id:
-                        # Replace the prefix in the signal ID
-                        new_id = replace_signal_prefix(original_id, make, model, signal_prefix)
-                        signal['id'] = new_id
 
-                        # Also update the 'name' field if it looks like it contains the ID
-                        if 'name' in signal and original_id in signal['name']:
-                            signal['name'] = signal['name'].replace(original_id, new_id)
+                    if original_id:
+                        # Replace the prefix in the signal ID if needed
+                        base_id = original_id
+                        if signal_prefix:
+                            base_id = replace_signal_prefix(original_id, make, model, signal_prefix)
+
+                        # Check for signal conflicts
+                        if base_id in signal_registry:
+                            # Check if the existing signal has the same definition
+                            if are_signals_equal(signal, signal_registry[base_id]):
+                                # Skip duplicate signals with identical definitions
+                                continue
+                            else:
+                                # Signal with same ID but different definition
+                                # Add a version suffix to the ID
+                                if base_id not in signal_versions:
+                                    signal_versions[base_id] = 1  # First conflict means version 2
+
+                                signal_versions[base_id] += 1
+                                versioned_id = f"{base_id}_v{signal_versions[base_id]}"
+
+                                # Update the ID
+                                signal['id'] = versioned_id
+
+                                # Update name if it contains the original ID
+                                if 'name' in signal and original_id in signal['name']:
+                                    signal['name'] = signal['name'].replace(original_id, versioned_id)
+
+                                # Register the new versioned signal
+                                signal_registry[versioned_id] = signal
+                        else:
+                            # New signal, no conflicts
+                            signal['id'] = base_id
+
+                            # Update name if using new prefix
+                            if signal_prefix and original_id != base_id and 'name' in signal and original_id in signal['name']:
+                                signal['name'] = signal['name'].replace(original_id, base_id)
+
+                            # Register the signal
+                            signal_registry[base_id] = signal
+
+                    # Add this signal to our new signals list
+                    new_signals.append(signal)
+
+                # Replace the signals array with our processed version
+                cmd['signals'] = new_signals
 
             if cmd_id in command_map:
                 # Merge signals if command already exists
