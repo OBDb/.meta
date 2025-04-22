@@ -321,19 +321,22 @@ def calculate_hash(data):
     data_str = json.dumps(data, sort_keys=True)
     return hashlib.sha256(data_str.encode()).hexdigest()
 
-def generate_provenance_report(signal_origins, output_path):
+def generate_provenance_report(signal_origins, cmd_origins, output_path):
     """
     Generate a GitHub Actions-friendly report showing which vehicle repositories
-    contributed to which signals in the merged result.
+    contributed to which signals and commands in the merged result.
 
     Args:
         signal_origins: Dictionary mapping signal IDs to their source information
+        cmd_origins: Dictionary mapping command IDs to their source information
         output_path: Path to save the report
     """
     # Generate a detailed report
     report = {
         "signalCount": len(signal_origins),
+        "commandCount": len(cmd_origins),
         "repoContributions": {},
+        "commands": {},
         "signals": {}
     }
 
@@ -360,33 +363,108 @@ def generate_provenance_report(signal_origins, output_path):
                     "make": source["make"],
                     "model": source["model"],
                     "signalCount": 0,
-                    "signals": []
+                    "commandCount": 0,
+                    "signals": [],
+                    "commands": []
                 }
 
-            report["repoContributions"][repo_name]["signalCount"] += 1
-            report["repoContributions"][repo_name]["signals"].append(signal_id)
+            if signal_id not in report["repoContributions"][repo_name]["signals"]:
+                report["repoContributions"][repo_name]["signalCount"] += 1
+                report["repoContributions"][repo_name]["signals"].append(signal_id)
 
-    # Sort repositories by contribution count
+    # Add command origins to the report
+    for cmd_id, sources in cmd_origins.items():
+        report["commands"][cmd_id] = {
+            "sources": [
+                {
+                    "repo": source["repo"],
+                    "make": source["make"],
+                    "model": source["model"],
+                    "file": source.get("file", "unknown")
+                }
+                for source in sources
+            ],
+            "description": sources[0].get("description", "")  # Use the first source's description
+        }
+
+        # Track contribution counts by repository
+        for source in sources:
+            repo_name = source["repo"]
+            if repo_name not in report["repoContributions"]:
+                report["repoContributions"][repo_name] = {
+                    "make": source["make"],
+                    "model": source["model"],
+                    "signalCount": 0,
+                    "commandCount": 0,
+                    "signals": [],
+                    "commands": []
+                }
+
+            if cmd_id not in report["repoContributions"][repo_name]["commands"]:
+                report["repoContributions"][repo_name]["commandCount"] += 1
+                report["repoContributions"][repo_name]["commands"].append(cmd_id)
+
+    # Sort repositories by total contribution count (signals + commands)
     sorted_repos = sorted(
         report["repoContributions"].items(),
-        key=lambda x: x[1]["signalCount"],
+        key=lambda x: (x[1]["signalCount"] + x[1]["commandCount"], x[1]["signalCount"]),
         reverse=True
     )
 
     # Generate GitHub Actions-friendly summary output
     summary = []
 
-    # Add header
-    summary.append("# Signal Provenance Report")
-    summary.append(f"\nTotal signals in merged output: **{report['signalCount']}**\n")
+    # Add header with overall statistics
+    summary.append(f"\n**Total signals in merged output:** {report['signalCount']}")
+    summary.append(f"**Total commands in merged output:** {report['commandCount']}")
+    summary.append(f"**Total contributing repositories:** {len(report['repoContributions'])}\n")
 
     # Add repository contribution table
     summary.append("## Repository Contributions")
-    summary.append("\n| Repository | Make | Model | Signal Count |")
-    summary.append("| --- | --- | --- | ---: |")
+    summary.append("\n| Repository | Make | Model | Signal Count | Command Count | Total Contributions |")
+    summary.append("| --- | --- | --- | ---: | ---: | ---: |")
 
     for repo_name, data in sorted_repos:
-        summary.append(f"| {repo_name} | {data['make']} | {data['model']} | {data['signalCount']} |")
+        total = data["signalCount"] + data["commandCount"]
+        summary.append(f"| {repo_name} | {data['make']} | {data['model']} | {data['signalCount']} | {data['commandCount']} | {total} |")
+
+    # Add detailed signal provenance section
+    summary.append("\n## Signal Provenance")
+    summary.append("\nThis table shows the top 30 signals with the most contributing repositories:")
+    summary.append("\n| Signal ID | Contributing Repositories | Source Count |")
+    summary.append("| --- | --- | ---: |")
+
+    # Sort signals by number of contributing repos
+    sorted_signals = sorted(
+        report["signals"].items(),
+        key=lambda x: len(x[1]["sources"]),
+        reverse=True
+    )[:30]  # Limit to top 30
+
+    for signal_id, data in sorted_signals:
+        repo_list = ", ".join(sorted(set(src["repo"] for src in data["sources"])))
+        summary.append(f"| `{signal_id}` | {repo_list} | {len(data['sources'])} |")
+
+    # Add detailed command provenance section
+    summary.append("\n## Command Provenance")
+    summary.append("\nThis table shows the top 30 commands with the most contributing repositories:")
+    summary.append("\n| Command ID | Description | Contributing Repositories | Source Count |")
+    summary.append("| --- | --- | --- | ---: |")
+
+    # Sort commands by number of contributing repos
+    sorted_commands = sorted(
+        report["commands"].items(),
+        key=lambda x: len(x[1]["sources"]),
+        reverse=True
+    )[:30]  # Limit to top 30
+
+    for cmd_id, data in sorted_commands:
+        repo_list = ", ".join(sorted(set(src["repo"] for src in data["sources"])))
+        description = data["description"][:50] + "..." if len(data["description"]) > 50 else data["description"]
+        summary.append(f"| `{cmd_id}` | {description} | {repo_list} | {len(data['sources'])} |")
+
+    # Note about full report
+    summary.append(f"\n\nFor complete details, see the full JSON report at `{output_path}`")
 
     # Save the full JSON report
     with open(output_path, 'w') as f:
@@ -407,6 +485,7 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, s
 
     # Track signal origins throughout the merging process
     global_signal_origins = {}
+    global_command_origins = {}
 
     model_year_data = []
     temp_output_path = Path(output_dir) / 'merged_signalset_temp.json'
@@ -475,6 +554,30 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, s
 
             # Remove the signal origins metadata from the repo signalset before merging
             del repo_signalset["_signal_origins"]
+
+        # Process and track commands from this repo
+        for cmd in repo_signalset.get("commands", []):
+            hdr = cmd.get('hdr', '')
+            eax = cmd.get('eax', '')
+            pid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
+            cmd_id = f"{hdr}:{eax}:{pid}"
+
+            # Build command source information
+            cmd_source = {
+                "repo": repo_key,
+                "make": repo_data["make"],
+                "model": repo_data["model"],
+                "description": cmd.get("description", ""),
+                "file": "combined" # Since commands come from merged signalsets
+            }
+
+            # Track command origins
+            if cmd_id not in global_command_origins:
+                global_command_origins[cmd_id] = []
+
+            # Only add if this repo isn't already in the sources for this command
+            if not any(src["repo"] == repo_key for src in global_command_origins[cmd_id]):
+                global_command_origins[cmd_id].append(cmd_source)
 
         # Merge into the global signalset
         # Add commands
@@ -549,12 +652,13 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, s
 
     # Generate the provenance report
     print(f"Generating signal provenance report...")
-    report, summary_path = generate_provenance_report(global_signal_origins, provenance_report_path)
+    report, summary_path = generate_provenance_report(global_signal_origins, global_command_origins, provenance_report_path)
 
     signal_count = len(global_signal_origins)
+    command_count = len(global_command_origins)
     repo_count = len(report["repoContributions"])
     print(f"Signal provenance report saved:")
-    print(f"- JSON report: {provenance_report_path} ({signal_count} signals from {repo_count} repositories)")
+    print(f"- JSON report: {provenance_report_path} ({signal_count} signals, {command_count} commands from {repo_count} repositories)")
     print(f"- Markdown summary: {summary_path}")
 
     print(f"Saved merged signalset to {final_output_path} ({len(merged_signalset['commands'])} commands)")
