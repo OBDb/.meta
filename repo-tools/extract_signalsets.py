@@ -116,134 +116,6 @@ def clone_repos(org_name, workspace_dir, filter_prefix=None):
     if failed > 0:
         print("Check the error messages above for details about failed repositories.")
 
-def process_signal_groups(signalset_data, parameters, make, model):
-    """Process signal groups and assign group membership to parameters."""
-    if 'signalGroups' not in signalset_data:
-        return parameters
-
-    for param in parameters:
-        param['signalGroups'] = []  # Initialize empty list for signal groups this parameter belongs to
-
-    for group in signalset_data.get('signalGroups', []):
-        group_id = group.get('id')
-        matching_regex = group.get('matchingRegex')
-        group_name = group.get('name', group_id)
-        group_path = group.get('path', '')
-        suggested_metric_group = group.get('suggestedMetricGroup', '')
-
-        if not group_id or not matching_regex:
-            continue
-
-        try:
-            pattern = re.compile(matching_regex)
-
-            # Check each parameter against the regex
-            for param in parameters:
-                param_id = param.get('id', '')
-                if pattern.search(param_id):
-                    # Create a group reference with basic info
-                    group_info = {
-                        'id': group_id,
-                        'name': group_name,
-                        'path': group_path
-                    }
-
-                    # Add suggestedMetricGroup if it exists
-                    if suggested_metric_group:
-                        group_info['suggestedMetricGroup'] = suggested_metric_group
-
-                    # Store the regex match result to extract subgroups if needed
-                    match = pattern.search(param_id)
-                    if match and match.groups():
-                        # Extract capture groups from the regex match
-                        group_info['matchDetails'] = {}
-                        for i, group_value in enumerate(match.groups(), 1):
-                            group_info['matchDetails'][f'group{i}'] = group_value
-
-                    # Add this group to the parameter's signalGroups list
-                    param['signalGroups'].append(group_info)
-        except re.error as e:
-            print(f"Error with regex pattern '{matching_regex}' in signal group '{group_id}': {e}")
-
-    return parameters
-
-def parse_signalset(file_path, make, model, years=None):
-    """Parse a signalset JSON file and extract parameter information."""
-    with open(file_path) as f:
-        data = json.load(f)
-
-    parameters = []
-    for cmd in data.get('commands', []):
-        hdr = cmd.get('hdr', '')
-
-        # Extract extended address (eax) from command
-        eax = cmd.get('eax', '')
-
-        # Extract debug flag from command
-        debug_flag = cmd.get('dbg', False)
-
-        for pid, value in cmd.get('cmd', {}).items():
-            for signal in cmd.get('signals', []):
-                fmt = signal.get('fmt', {})
-                scaling = ''
-
-                # Generate scaling equation
-                if 'map' in fmt:
-                    scaling = f"Mapped values: {fmt['map']}"
-                else:
-                    components = []
-                    if 'mul' in fmt:
-                        components.append(f"*{fmt['mul']}")
-                    if 'div' in fmt:
-                        components.append(f"/{fmt['div']}")
-                    if 'add' in fmt:
-                        components.append(f"+{fmt['add']}")
-
-                    scaling = f"raw{' '.join(components)}"
-
-                    # Add clamping if min/max are specified
-                    if 'min' in fmt or 'max' in fmt:
-                        clamping = []
-                        if 'min' in fmt:
-                            clamping.append(str(fmt['min']))
-                        if 'max' in fmt:
-                            clamping.append(str(fmt['max']))
-                        scaling += f" clamped to [{', '.join(clamping)}]"
-
-                # Extract bit information
-                bit_offset = fmt.get('bix', 0)  # bit index/offset
-                bit_length = fmt.get('len', 8)  # bit length, default to 8 if not specified
-
-                parameter = {
-                    'hdr': hdr,
-                    'eax': eax,
-                    'pid': pid,
-                    'cmd': cmd.get('cmd', {}),
-                    'id': signal.get('id', ''),
-                    'name': signal.get('name', ''),
-                    'unit': fmt.get('unit', ''),
-                    'suggestedMetric': signal.get('suggestedMetric', ''),
-                    'scaling': scaling,
-                    'path': signal.get('path', ''),
-                    'make': make,
-                    'model': model,
-                    'bitOffset': bit_offset,
-                    'bitLength': bit_length,
-                    'debug': debug_flag,
-                    'fmt': fmt  # Include the complete fmt object for reference
-                }
-
-                # Add model year information if available
-                if years:
-                    parameter['modelYears'] = years
-
-                parameters.append(parameter)
-
-    # Process signal groups and assign to parameters
-    parameters = process_signal_groups(data, parameters, make, model)
-
-    return parameters
-
 def extract_year_range_from_filename(filename):
     """Extract year range from filename pattern like 'aaaa-bbbb.json'."""
     # Use regex to extract year range from filename
@@ -277,21 +149,77 @@ def load_model_year_data(repo_dir, make, model):
         print(f"Error loading model year data for {make}-{model}: {e}")
         return None
 
+def merge_signalsets(signalset_files, make, model):
+    """
+    Merge multiple signalset files into a single unified signalset structure.
+    Combines commands and signals from all input files.
+    """
+    merged_signalset = {
+        "commands": []
+    }
+
+    # Track commands by their unique identifier (combination of hdr/eax/pid)
+    command_map = {}
+    signal_groups_map = {}
+
+    for signalset_path in signalset_files:
+        with open(signalset_path) as f:
+            data = json.load(f)
+
+        # Track source file
+        source_info = {
+            "file": signalset_path.name,
+            "make": make,
+            "model": model
+        }
+
+        # Extract year range from filename if available
+        years = extract_year_range_from_filename(signalset_path.name)
+        if years:
+            source_info["yearRange"] = {"start": years[0], "end": years[1]}
+
+        # Process commands
+        for cmd in data.get('commands', []):
+            # Create a unique identifier for this command
+            hdr = cmd.get('hdr', '')
+            eax = cmd.get('eax', '')
+            pid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
+            cmd_id = f"{hdr}:{eax}:{pid}"
+
+            if cmd_id in command_map:
+                # Merge signals if command already exists
+                existing_cmd = command_map[cmd_id]
+                existing_signals = {s.get('id'): s for s in existing_cmd.get('signals', [])}
+
+                for signal in cmd.get('signals', []):
+                    signal_id = signal.get('id')
+                    if signal_id not in existing_signals:
+                        existing_cmd.setdefault('signals', []).append(signal)
+            else:
+                # Add new command
+                command_map[cmd_id] = cmd
+                merged_signalset["commands"].append(cmd)
+
+    return merged_signalset
+
 def calculate_hash(data):
     """Calculate a hash from the sorted and normalized data for easy comparison."""
-    # Sort the data deterministically
-    data_copy = sorted(data, key=lambda x: (x['make'], x['model'], x['hdr'], x['id']))
     # Convert to a string and hash
-    data_str = json.dumps(data_copy, sort_keys=True)
+    data_str = json.dumps(data, sort_keys=True)
     return hashlib.sha256(data_str.encode()).hexdigest()
 
 def extract_data(workspace_dir, output_dir, force=False, filter_prefix=None):
-    """Extract matrix data from all repositories."""
-    matrix_data = []
+    """Extract and merge signalset data from all repositories."""
+    merged_signalset = {
+        "commands": []
+    }
+
     model_year_data = []
-    temp_output_path = Path(output_dir) / 'matrix_data_temp.json'
-    final_output_path = Path(output_dir) / 'matrix_data.json'
+    temp_output_path = Path(output_dir) / 'merged_signalset_temp.json'
+    final_output_path = Path(output_dir) / 'merged_signalset.json'
     model_years_output_path = Path(output_dir) / 'model_years_data.json'
+
+    all_signalsets = {}  # Organize by make-model
 
     # Process each repository
     for repo_dir in Path(workspace_dir).iterdir():
@@ -319,22 +247,12 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefix=None):
             print(f"No signalset files found for {make} {model}, skipping...")
             continue
 
-        # Process each signalset file
-        for signalset_path in signalset_files:
-            # Extract year range from filename if available
-            years = None
-            if signalset_path.name != 'default.json':
-                years = extract_year_range_from_filename(signalset_path.name)
-                if years:
-                    print(f"  Processing signalset for years {years[0]}-{years[1]}")
-                else:
-                    print(f"  Processing signalset: {signalset_path.name}")
-            else:
-                print(f"  Processing default signalset")
-
-            # Parse the signalset file
-            parameters = parse_signalset(signalset_path, make, model, years)
-            matrix_data.extend(parameters)
+        # Store all signalset files for this make-model
+        all_signalsets[f"{make}-{model}"] = {
+            "files": signalset_files,
+            "make": make,
+            "model": model
+        }
 
         # Check for model year PID support data
         my_data = load_model_year_data(repo_dir, make, model)
@@ -342,15 +260,40 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefix=None):
             model_year_data.append(my_data)
             print(f"  Found model year PID data for {make} {model}")
 
+    # Merge all signalsets
+    for repo_key, repo_data in all_signalsets.items():
+        print(f"Merging signalsets for {repo_key}...")
+        repo_signalset = merge_signalsets(
+            repo_data["files"],
+            repo_data["make"],
+            repo_data["model"]
+        )
+
+        # Merge into the global signalset
+        # Add commands
+        existing_cmd_ids = {
+            f"{cmd.get('hdr', '')}:{cmd.get('eax', '')}:{list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''}"
+            for cmd in merged_signalset["commands"]
+        }
+
+        for cmd in repo_signalset["commands"]:
+            hdr = cmd.get('hdr', '')
+            eax = cmd.get('eax', '')
+            pid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
+            cmd_id = f"{hdr}:{eax}:{pid}"
+
+            if cmd_id not in existing_cmd_ids:
+                merged_signalset["commands"].append(cmd)
+
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
 
     # Check if we need to update the file
-    current_hash = calculate_hash(matrix_data)
+    current_hash = calculate_hash(merged_signalset)
 
     # Write to temporary file first
     with open(temp_output_path, 'w') as f:
-        json.dump(matrix_data, f, indent=2, sort_keys=True)
+        json.dump(merged_signalset, f, indent=2, sort_keys=True)
 
     # Run the validation and normalization process
     print("Running validation and normalization...")
@@ -397,20 +340,23 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefix=None):
     else:
         print("No model year data found.")
 
-    print(f"Saved matrix data to {final_output_path} ({len(matrix_data)} parameters total)")
+    print(f"Saved merged signalset to {final_output_path} ({len(merged_signalset['commands'])} commands)")
 
     # Compare with previous version if it exists
     if final_output_path.exists() and not force:
-        with open(final_output_path) as f:
-            old_data = json.load(f)
-        old_hash = calculate_hash(old_data)
+        try:
+            with open(final_output_path) as f:
+                old_data = json.load(f)
+            old_hash = calculate_hash(old_data)
 
-        if old_hash == current_hash:
-            print("No changes detected in the data.")
-        else:
-            print("Changes detected in the matrix data.")
+            if old_hash == current_hash:
+                print("No changes detected in the data.")
+            else:
+                print("Changes detected in the merged signalset.")
+        except (json.JSONDecodeError, FileNotFoundError):
+            print("Previous file invalid or not found. Creating new file.")
 
-    return matrix_data
+    return merged_signalset
 
 def main():
     parser = argparse.ArgumentParser(description='Extract OBD parameter data')
