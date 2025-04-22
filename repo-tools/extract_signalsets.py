@@ -46,7 +46,7 @@ def handle_repo(org_name, repo, workspace_dir):
         print(f"Error processing {repo}: {e.stderr}")
         return False
 
-def clone_repos(org_name, workspace_dir, filter_prefix=None):
+def clone_repos(org_name, workspace_dir, filter_prefixes=None):
     """Clone all repositories from a GitHub organization using parallel processing."""
     # Create workspace directory if it doesn't exist
     Path(workspace_dir).mkdir(parents=True, exist_ok=True)
@@ -74,13 +74,16 @@ def clone_repos(org_name, workspace_dir, filter_prefix=None):
         if '.' not in repo
     ]
 
-    # Apply prefix filter if specified
-    if filter_prefix:
-        filtered_repos = [
-            repo for repo in filtered_repos
-            if repo.startswith(filter_prefix)
-        ]
-        print(f"Filtered to {len(filtered_repos)} repositories starting with '{filter_prefix}'")
+    # Apply prefix filters if specified
+    if filter_prefixes:
+        # Find repos that match any of the specified prefixes
+        prefix_filtered_repos = []
+        for repo in filtered_repos:
+            if any(repo.startswith(prefix) for prefix in filter_prefixes):
+                prefix_filtered_repos.append(repo)
+
+        filtered_repos = prefix_filtered_repos
+        print(f"Filtered to {len(filtered_repos)} repositories starting with any of: {', '.join(filter_prefixes)}")
     else:
         print(f"Found {len(filtered_repos)} repositories to process")
 
@@ -240,7 +243,7 @@ def calculate_hash(data):
     data_str = json.dumps(data, sort_keys=True)
     return hashlib.sha256(data_str.encode()).hexdigest()
 
-def extract_data(workspace_dir, output_dir, force=False, filter_prefix=None, signal_prefix=None):
+def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, signal_prefix=None):
     """Extract and merge signalset data from all repositories."""
     merged_signalset = {
         "commands": []
@@ -258,8 +261,8 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefix=None, sig
         if not repo_dir.is_dir():
             continue
 
-        # Skip repositories that don't match the prefix filter if specified
-        if filter_prefix and not repo_dir.name.startswith(filter_prefix):
+        # Skip repositories that don't match any prefix filter if specified
+        if filter_prefixes and not any(repo_dir.name.startswith(prefix) for prefix in filter_prefixes):
             continue
 
         signalsets_dir = repo_dir / 'signalsets' / 'v3'
@@ -398,7 +401,7 @@ def main():
     parser.add_argument('--output', default='public/data', help='Output directory for JSON data')
     parser.add_argument('--fetch', action='store_true', help='Fetch/update repositories before extraction')
     parser.add_argument('--force', action='store_true', help='Force update even if no changes detected')
-    parser.add_argument('--filter-prefix', help='Filter repositories to only those with the specified prefix')
+    parser.add_argument('--filter-prefix', action='append', help='Filter repositories to only those with the specified prefix (can be used multiple times)')
     parser.add_argument('--signal-prefix', help='Replace vehicle-specific signal ID prefixes with this prefix')
     args = parser.parse_args()
 
@@ -415,7 +418,7 @@ def main():
     extract_data(workspace_dir=args.workspace,
                 output_dir=args.output,
                 force=args.force,
-                filter_prefix=args.filter_prefix,
+                filter_prefixes=args.filter_prefix,
                 signal_prefix=args.signal_prefix)
 
     print(f"Data extraction complete. The JSON file is ready for use in the React application.")
