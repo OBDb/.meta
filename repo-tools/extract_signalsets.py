@@ -202,6 +202,7 @@ def merge_signalsets(signalset_files, make, model, signal_prefix=None):
     # Track signals by their ID to detect conflicts
     signal_registry = {}  # Maps signal ID to its definition
     signal_versions = {}  # Tracks version numbers for signals with same base ID
+    signal_origins = {}   # Track where each signal came from
 
     for signalset_path in signalset_files:
         with open(signalset_path) as f:
@@ -211,7 +212,8 @@ def merge_signalsets(signalset_files, make, model, signal_prefix=None):
         source_info = {
             "file": signalset_path.name,
             "make": make,
-            "model": model
+            "model": model,
+            "repo": f"{make}-{model}"
         }
 
         # Extract year range from filename if available
@@ -248,6 +250,10 @@ def merge_signalsets(signalset_files, make, model, signal_prefix=None):
                             # Check if the existing signal has the same definition
                             if are_signals_equal(signal, signal_registry[base_id]):
                                 # Skip duplicate signals with identical definitions
+                                # Still record this repo as a source for the signal
+                                if base_id in signal_origins:
+                                    if source_info["repo"] not in [src["repo"] for src in signal_origins[base_id]]:
+                                        signal_origins[base_id].append(source_info)
                                 continue
                             else:
                                 # Signal with same ID but different definition
@@ -267,6 +273,9 @@ def merge_signalsets(signalset_files, make, model, signal_prefix=None):
 
                                 # Register the new versioned signal
                                 signal_registry[versioned_id] = signal
+
+                                # Record origin of this versioned signal
+                                signal_origins[versioned_id] = [source_info]
                         else:
                             # New signal, no conflicts
                             signal['id'] = base_id
@@ -277,6 +286,9 @@ def merge_signalsets(signalset_files, make, model, signal_prefix=None):
 
                             # Register the signal
                             signal_registry[base_id] = signal
+
+                            # Record origin of this signal
+                            signal_origins[base_id] = [source_info]
 
                     # Add this signal to our new signals list
                     new_signals.append(signal)
@@ -298,6 +310,9 @@ def merge_signalsets(signalset_files, make, model, signal_prefix=None):
                 command_map[cmd_id] = cmd
                 merged_signalset["commands"].append(cmd)
 
+    # Add signal origins to the result
+    merged_signalset["_signal_origins"] = signal_origins
+
     return merged_signalset
 
 def calculate_hash(data):
@@ -306,16 +321,98 @@ def calculate_hash(data):
     data_str = json.dumps(data, sort_keys=True)
     return hashlib.sha256(data_str.encode()).hexdigest()
 
+def generate_provenance_report(signal_origins, output_path):
+    """
+    Generate a GitHub Actions-friendly report showing which vehicle repositories
+    contributed to which signals in the merged result.
+
+    Args:
+        signal_origins: Dictionary mapping signal IDs to their source information
+        output_path: Path to save the report
+    """
+    # Generate a detailed report
+    report = {
+        "signalCount": len(signal_origins),
+        "repoContributions": {},
+        "signals": {}
+    }
+
+    # Track contributions by repository
+    for signal_id, sources in signal_origins.items():
+        # Add detailed signal info
+        report["signals"][signal_id] = {
+            "sources": [
+                {
+                    "repo": source["repo"],
+                    "make": source["make"],
+                    "model": source["model"],
+                    "file": source.get("file", "unknown")
+                }
+                for source in sources
+            ]
+        }
+
+        # Track contribution counts by repository
+        for source in sources:
+            repo_name = source["repo"]
+            if repo_name not in report["repoContributions"]:
+                report["repoContributions"][repo_name] = {
+                    "make": source["make"],
+                    "model": source["model"],
+                    "signalCount": 0,
+                    "signals": []
+                }
+
+            report["repoContributions"][repo_name]["signalCount"] += 1
+            report["repoContributions"][repo_name]["signals"].append(signal_id)
+
+    # Sort repositories by contribution count
+    sorted_repos = sorted(
+        report["repoContributions"].items(),
+        key=lambda x: x[1]["signalCount"],
+        reverse=True
+    )
+
+    # Generate GitHub Actions-friendly summary output
+    summary = []
+
+    # Add header
+    summary.append("# Signal Provenance Report")
+    summary.append(f"\nTotal signals in merged output: **{report['signalCount']}**\n")
+
+    # Add repository contribution table
+    summary.append("## Repository Contributions")
+    summary.append("\n| Repository | Make | Model | Signal Count |")
+    summary.append("| --- | --- | --- | ---: |")
+
+    for repo_name, data in sorted_repos:
+        summary.append(f"| {repo_name} | {data['make']} | {data['model']} | {data['signalCount']} |")
+
+    # Save the full JSON report
+    with open(output_path, 'w') as f:
+        json.dump(report, f, indent=2)
+
+    # Save the GitHub Actions-friendly markdown summary
+    summary_path = output_path.with_suffix('.md')
+    with open(summary_path, 'w') as f:
+        f.write("\n".join(summary))
+
+    return report, summary_path
+
 def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, signal_prefix=None):
     """Extract and merge signalset data from all repositories."""
     merged_signalset = {
         "commands": []
     }
 
+    # Track signal origins throughout the merging process
+    global_signal_origins = {}
+
     model_year_data = []
     temp_output_path = Path(output_dir) / 'merged_signalset_temp.json'
     final_output_path = Path(output_dir) / 'merged_signalset.json'
     model_years_output_path = Path(output_dir) / 'model_years_data.json'
+    provenance_report_path = Path(output_dir) / 'signal_provenance_report.json'
 
     all_signalsets = {}  # Organize by make-model
 
@@ -368,6 +465,16 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, s
             repo_data["model"],
             signal_prefix
         )
+
+        # Track signal origins from this repo
+        if "_signal_origins" in repo_signalset:
+            for signal_id, sources in repo_signalset["_signal_origins"].items():
+                if signal_id not in global_signal_origins:
+                    global_signal_origins[signal_id] = []
+                global_signal_origins[signal_id].extend(sources)
+
+            # Remove the signal origins metadata from the repo signalset before merging
+            del repo_signalset["_signal_origins"]
 
         # Merge into the global signalset
         # Add commands
@@ -439,6 +546,16 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, s
         print(f"Saved model year data to {model_years_output_path} ({len(model_year_data)} vehicles)")
     else:
         print("No model year data found.")
+
+    # Generate the provenance report
+    print(f"Generating signal provenance report...")
+    report, summary_path = generate_provenance_report(global_signal_origins, provenance_report_path)
+
+    signal_count = len(global_signal_origins)
+    repo_count = len(report["repoContributions"])
+    print(f"Signal provenance report saved:")
+    print(f"- JSON report: {provenance_report_path} ({signal_count} signals from {repo_count} repositories)")
+    print(f"- Markdown summary: {summary_path}")
 
     print(f"Saved merged signalset to {final_output_path} ({len(merged_signalset['commands'])} commands)")
 
