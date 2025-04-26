@@ -226,8 +226,9 @@ def merge_signalsets(signalset_files, make, model, signal_prefix=None):
             # Create a unique identifier for this command
             hdr = cmd.get('hdr', '')
             eax = cmd.get('eax', '')
-            pid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
-            cmd_id = f"{hdr}:{eax}:{pid}"
+            sid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
+            pid = cmd.get('cmd', {}).get(sid, None)
+            cmd_id = f"{hdr}:{eax}:{sid}:{pid}"
 
             # Ensure debug flag exists
             if 'dbg' not in cmd:
@@ -454,7 +455,7 @@ def generate_provenance_report(signal_origins, cmd_origins, output_path):
             repo_name = src["repo"]
             repo_url = src["url"]
             repo_links.append(f"[{repo_name}]({repo_url})")
-        
+
         # Join unique links with commas
         unique_links = []
         seen_repos = set()
@@ -463,7 +464,7 @@ def generate_provenance_report(signal_origins, cmd_origins, output_path):
             if repo_name not in seen_repos:
                 unique_links.append(link)
                 seen_repos.add(repo_name)
-                
+
         repo_list = ", ".join(unique_links)
         summary.append(f"| `{signal_id}` | {repo_list} | {len(data['sources'])} |")
 
@@ -487,7 +488,7 @@ def generate_provenance_report(signal_origins, cmd_origins, output_path):
             repo_name = src["repo"]
             repo_url = src["url"]
             repo_links.append(f"[{repo_name}]({repo_url})")
-        
+
         # Join unique links with commas
         unique_links = []
         seen_repos = set()
@@ -496,7 +497,7 @@ def generate_provenance_report(signal_origins, cmd_origins, output_path):
             if repo_name not in seen_repos:
                 unique_links.append(link)
                 seen_repos.add(repo_name)
-                
+
         repo_list = ", ".join(unique_links)
         description = data["description"][:50] + "..." if len(data["description"]) > 50 else data["description"]
         summary.append(f"| `{cmd_id}` | {description} | {repo_list} | {len(data['sources'])} |")
@@ -627,8 +628,9 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, s
             for cmd in repo_signalset.get("commands", []):
                 hdr = cmd.get('hdr', '')
                 eax = cmd.get('eax', '')
-                pid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
-                cmd_id = f"{hdr}:{eax}:{pid}"
+                sid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
+                pid = cmd.get('cmd', {}).get(sid, None)
+                cmd_id = f"{hdr}:{eax}:{sid}:{pid}"
 
                 # Build command source information
                 cmd_source = {
@@ -654,16 +656,18 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, s
             for idx, cmd in enumerate(merged_signalset["commands"]):
                 hdr = cmd.get('hdr', '')
                 eax = cmd.get('eax', '')
-                pid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
-                cmd_id = f"{hdr}:{eax}:{pid}"
+                sid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
+                pid = cmd.get('cmd', {}).get(sid, None)
+                cmd_id = f"{hdr}:{eax}:{sid}:{pid}"
                 command_map[cmd_id] = idx
 
             # Add commands or merge signals for existing commands
             for cmd in repo_signalset["commands"]:
                 hdr = cmd.get('hdr', '')
                 eax = cmd.get('eax', '')
-                pid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
-                cmd_id = f"{hdr}:{eax}:{pid}"
+                sid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
+                pid = cmd.get('cmd', {}).get(sid, None)
+                cmd_id = f"{hdr}:{eax}:{sid}:{pid}"
 
                 if cmd_id in command_map:
                     # Command exists, merge signals
