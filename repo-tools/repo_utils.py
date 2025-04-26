@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
-import json
 import os
-import shutil
 import subprocess
-import argparse
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import multiprocessing
-import hashlib
-import sys
 
 def handle_repo(org_name, repo, workspace_dir):
-    """Clone or update a single repository."""
+    """
+    Clone or update a single repository.
+
+    Args:
+        org_name: GitHub organization name
+        repo: Repository name
+        workspace_dir: Directory to clone into
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
     repo_path = Path(workspace_dir) / repo
     try:
         if not repo_path.exists():
@@ -45,8 +50,18 @@ def handle_repo(org_name, repo, workspace_dir):
         print(f"Error processing {repo}: {e.stderr}")
         return False
 
-def clone_repos(org_name, workspace_dir):
-    """Clone all repositories from a GitHub organization using parallel processing."""
+def clone_repos(org_name, workspace_dir, filter_prefixes=None):
+    """
+    Clone all repositories from a GitHub organization using parallel processing.
+
+    Args:
+        org_name: GitHub organization name
+        workspace_dir: Directory to clone repositories into
+        filter_prefixes: Optional list of repository name prefixes to filter by
+
+    Returns:
+        tuple: (successful_count, failed_count)
+    """
     # Create workspace directory if it doesn't exist
     Path(workspace_dir).mkdir(parents=True, exist_ok=True)
 
@@ -65,7 +80,7 @@ def clone_repos(org_name, workspace_dir):
         repos = subprocess.check_output(cmd).decode().strip().split('\n')
     except subprocess.CalledProcessError as e:
         print(f"Error fetching repositories: {e}")
-        return
+        return 0, 0
 
     # Filter out excluded repos
     filtered_repos = [
@@ -73,7 +88,18 @@ def clone_repos(org_name, workspace_dir):
         if '.' not in repo
     ]
 
-    print(f"Found {len(filtered_repos)} repositories to process")
+    # Apply prefix filters if specified
+    if filter_prefixes:
+        # Find repos that match any of the specified prefixes
+        prefix_filtered_repos = []
+        for repo in filtered_repos:
+            if any(repo.startswith(prefix) for prefix in filter_prefixes):
+                prefix_filtered_repos.append(repo)
+
+        filtered_repos = prefix_filtered_repos
+        print(f"Filtered to {len(filtered_repos)} repositories starting with any of: {', '.join(filter_prefixes)}")
+    else:
+        print(f"Found {len(filtered_repos)} repositories to process")
 
     # Determine optimal number of workers based on CPU cores
     num_workers = min(32, multiprocessing.cpu_count() * 2)  # Cap at 32 workers
@@ -107,15 +133,4 @@ def clone_repos(org_name, workspace_dir):
     if failed > 0:
         print("Check the error messages above for details about failed repositories.")
 
-def main():
-    parser = argparse.ArgumentParser(description='Extract OBD parameter data for the OBDb Explorer')
-    parser.add_argument('--org', default='OBDb', help='GitHub organization name')
-    parser.add_argument('--workspace', default='workspace', help='Workspace directory for cloning repos')
-    args = parser.parse_args()
-
-    clone_repos(args.org, args.workspace)
-
-    print(f"Data extraction complete. The JSON file is ready for use in the React application.")
-
-if __name__ == '__main__':
-    main()
+    return successful, failed
