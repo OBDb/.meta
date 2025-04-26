@@ -238,13 +238,73 @@ def create_branch_and_pr(org_name, repo_name, repo_path, copied_files, branch_na
         print(f"Error creating PR for {repo_name}: {e.stderr}")
         return None
 
-def monitor_pr_status(repo_path, pr_url):
+def cleanup_repo(repo_path, branch_name):
+    """
+    Clean up local repository after PR is merged:
+    - Fetch updates from remote with pruning
+    - Checkout main branch
+    - Rebase main on origin/main
+    - Delete the working branch
+
+    Args:
+        repo_path: Path to repository
+        branch_name: Name of branch to delete
+
+    Returns:
+        bool: True if cleanup was successful, False otherwise
+    """
+    try:
+        # Fetch updates from remote with pruning
+        subprocess.run(
+            ['git', 'fetch', '--all', '-p'],
+            check=True,
+            cwd=str(repo_path),
+            capture_output=True,
+            text=True
+        )
+
+        # Checkout main branch
+        subprocess.run(
+            ['git', 'checkout', 'main'],
+            check=True,
+            cwd=str(repo_path),
+            capture_output=True,
+            text=True
+        )
+
+        # Rebase main on origin/main
+        subprocess.run(
+            ['git', 'rebase', 'origin/main'],
+            check=True,
+            cwd=str(repo_path),
+            capture_output=True,
+            text=True
+        )
+
+        # Delete the working branch
+        subprocess.run(
+            ['git', 'branch', '-D', branch_name],
+            check=True,
+            cwd=str(repo_path),
+            capture_output=True,
+            text=True
+        )
+
+        print(f"Cleaned up repository at {repo_path}")
+        return True
+
+    except subprocess.CalledProcessError as e:
+        print(f"Error cleaning up repository at {repo_path}: {e.stderr}")
+        return False
+
+def monitor_pr_status(repo_path, pr_url, branch_name):
     """
     Monitor PR status until it is merged or closed.
 
     Args:
         repo_path: Path to repository
         pr_url: URL of the PR to monitor
+        branch_name: Name of branch to clean up if PR is merged
 
     Returns:
         bool: True if PR was merged successfully, False otherwise
@@ -268,6 +328,12 @@ def monitor_pr_status(repo_path, pr_url):
 
             if pr_data.get('mergedAt'):
                 print(f"PR {pr_url} was merged successfully!")
+
+                # Clean up the repository after successful merge
+                cleanup_success = cleanup_repo(repo_path, branch_name)
+                if not cleanup_success:
+                    print(f"Warning: Could not clean up repository after PR {pr_url} was merged")
+
                 return True
 
             if pr_data.get('state') == 'CLOSED':
@@ -327,7 +393,7 @@ def process_vehicle_repo(args, template_repo_path, vehicle_repo_path):
 
         # Monitor PR status if requested
         if args.watch:
-            return repo_name, monitor_pr_status(vehicle_repo_path, pr_url)
+            return repo_name, monitor_pr_status(vehicle_repo_path, pr_url, branch_name)
         else:
             return repo_name, True
 
