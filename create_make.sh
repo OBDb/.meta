@@ -9,12 +9,14 @@ fi
 REPO_NAME=$1
 TEMPLATE_REPO="OBDb/.make-template"
 
+mkdir -p workspace
+
 # Create a new GitHub repository from the template
 echo "Creating the new GitHub repository from the template: $TEMPLATE_REPO"
-gh repo create OBDb/$REPO_NAME --template $TEMPLATE_REPO --public --clone
+gh repo create OBDb/$REPO_NAME --template $TEMPLATE_REPO --public --clone workspace/$REPO_NAME
 
 # Navigate into the newly cloned repo directory
-cd $REPO_NAME || exit
+cd "workspace/$REPO_NAME" || exit
 
 # Configure repository settings (auto-merge, disable merge commit and rebase merge, delete branch on merge)
 echo "Configuring repository settings for $REPO_NAME"
