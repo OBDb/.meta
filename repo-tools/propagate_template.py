@@ -178,6 +178,22 @@ def create_branch_and_pr(org_name, repo_name, repo_path, copied_files, branch_na
 
         if not status:
             print(f"No changes to commit in {repo_name}")
+            # Clean up branch since we don't need it
+            subprocess.run(
+                ['git', 'checkout', 'main'],
+                check=True,
+                cwd=str(repo_path),
+                capture_output=True,
+                text=True
+            )
+            subprocess.run(
+                ['git', 'branch', '-D', branch_name],
+                check=True,
+                cwd=str(repo_path),
+                capture_output=True,
+                text=True
+            )
+            print(f"Cleaned up unused branch {branch_name} in {repo_name}")
             return None
 
         # Commit changes
