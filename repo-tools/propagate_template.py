@@ -354,6 +354,12 @@ def monitor_pr_status(repo_path, pr_url, branch_name):
 
             if pr_data.get('state') == 'CLOSED':
                 print(f"PR {pr_url} was closed without merging")
+
+                # Clean up the repository even when PR was closed without merging
+                cleanup_success = cleanup_repo(repo_path, branch_name)
+                if not cleanup_success:
+                    print(f"Warning: Could not clean up repository after PR {pr_url} was closed")
+
                 return False
 
             # PR is still open, wait and check again
