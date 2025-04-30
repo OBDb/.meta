@@ -523,6 +523,8 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, s
                 hdr = cmd.get('hdr', '')
                 eax = cmd.get('eax', '')
                 sid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
+                if sid != '21' and sid != '22':
+                    continue  # Only aggregate service 21/22 commands; all other services are standardized.
                 pid = cmd.get('cmd', {}).get(sid, None)
                 cmd_id = f"{hdr}:{eax}:{sid}:{pid}"
 
