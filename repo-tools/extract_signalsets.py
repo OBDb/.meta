@@ -331,7 +331,7 @@ def generate_provenance_report(signal_origins, cmd_origins, output_path):
 
     # Add detailed signal provenance section
     summary.append("\n## Signal Provenance")
-    summary.append("\nThis table shows the top 30 signals with the most contributing repositories:")
+    summary.append("\nThis table shows all signals with their contributing repositories:")
     summary.append("\n| Signal ID | Contributing Repositories | Source Count |")
     summary.append("| --- | --- | ---: |")
 
@@ -340,7 +340,7 @@ def generate_provenance_report(signal_origins, cmd_origins, output_path):
         report["signals"].items(),
         key=lambda x: len(x[1]["sources"]),
         reverse=True
-    )[:30]  # Limit to top 30
+    )
 
     for signal_id, data in sorted_signals:
         # Create list of repo links
@@ -364,7 +364,7 @@ def generate_provenance_report(signal_origins, cmd_origins, output_path):
 
     # Add detailed command provenance section
     summary.append("\n## Command Provenance")
-    summary.append("\nThis table shows the top 30 commands with the most contributing repositories:")
+    summary.append("\nThis table shows all commands with their contributing repositories:")
     summary.append("\n| Command ID | Description | Contributing Repositories | Source Count |")
     summary.append("| --- | --- | --- | ---: |")
 
@@ -373,7 +373,7 @@ def generate_provenance_report(signal_origins, cmd_origins, output_path):
         report["commands"].items(),
         key=lambda x: len(x[1]["sources"]),
         reverse=True
-    )[:30]  # Limit to top 30
+    )
 
     for cmd_id, data in sorted_commands:
         # Create list of repo links
