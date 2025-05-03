@@ -462,7 +462,7 @@ def main():
             return
 
         # Process each vehicle repo
-        num_workers = min(16, multiprocessing.cpu_count())  # Lower number of workers to avoid API rate limits
+        num_workers = min(4, multiprocessing.cpu_count())  # Lower number of workers to avoid API rate limits
 
         successful = 0
         failed = 0
