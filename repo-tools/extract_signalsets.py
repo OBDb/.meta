@@ -144,25 +144,35 @@ def merge_signalsets(signalset_files, make, model, signal_prefix=None):
 
                         # Check for signal conflicts
                         if base_id in signal_registry:
-                            # Add a version suffix to the ID
-                            if base_id not in signal_versions:
-                                signal_versions[base_id] = 1  # First conflict means version 2
+                            # Check if the existing signal has the same definition
+                            if are_signals_equal(signal, signal_registry[base_id]):
+                                # Skip duplicate signals with identical definitions
+                                # Still record this repo as a source for the signal
+                                if base_id in signal_origins:
+                                    if source_info["repo"] not in [src["repo"] for src in signal_origins[base_id]]:
+                                        signal_origins[base_id].append(source_info)
+                                continue
+                            else:
+                                # Signal with same ID but different definition
+                                # Add a version suffix to the ID
+                                if base_id not in signal_versions:
+                                    signal_versions[base_id] = 1  # First conflict means version 2
 
-                            signal_versions[base_id] += 1
-                            versioned_id = f"{base_id}_v{signal_versions[base_id]}"
+                                signal_versions[base_id] += 1
+                                versioned_id = f"{base_id}_v{signal_versions[base_id]}"
 
-                            # Update the ID
-                            signal['id'] = versioned_id
+                                # Update the ID
+                                signal['id'] = versioned_id
 
-                            # Update name if it contains the original ID
-                            if 'name' in signal and original_id in signal['name']:
-                                signal['name'] = signal['name'].replace(original_id, versioned_id)
+                                # Update name if it contains the original ID
+                                if 'name' in signal and original_id in signal['name']:
+                                    signal['name'] = signal['name'].replace(original_id, versioned_id)
 
-                            # Register the new versioned signal
-                            signal_registry[versioned_id] = signal
+                                # Register the new versioned signal
+                                signal_registry[versioned_id] = signal
 
-                            # Record origin of this versioned signal
-                            signal_origins[versioned_id] = [source_info]
+                                # Record origin of this versioned signal
+                                signal_origins[versioned_id] = [source_info]
                         else:
                             # New signal, no conflicts
                             signal['id'] = base_id
