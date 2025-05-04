@@ -97,7 +97,6 @@ def merge_signalsets(signalset_files, make, model, signal_prefix=None):
     signal_registry = {}  # Maps signal ID to its definition
     signal_versions = {}  # Tracks version numbers for signals with same base ID
     signal_origins = {}   # Track where each signal came from
-    signal_commands = {}  # Track which command each signal appears in
 
     for signalset_path in signalset_files:
         with open(signalset_path) as f:
@@ -147,41 +146,12 @@ def merge_signalsets(signalset_files, make, model, signal_prefix=None):
                         if base_id in signal_registry:
                             # Check if the existing signal has the same definition
                             if are_signals_equal(signal, signal_registry[base_id]):
-                                # Signal has identical definition but might be in a different command
-                                # Check if we've already registered this signal in this command
-                                if cmd_id in signal_commands.get(base_id, []):
-                                    # Skip duplicate signals in same command
-                                    # Still record this repo as a source for the signal
-                                    if base_id in signal_origins:
-                                        if source_info["repo"] not in [src["repo"] for src in signal_origins[base_id]]:
-                                            signal_origins[base_id].append(source_info)
-                                    continue
-                                else:
-                                    # Signal exists but in a different command, so we need to create a versioned ID
-                                    if base_id not in signal_versions:
-                                        signal_versions[base_id] = 1  # First appearance means version 2 for next appearance
-
-                                    signal_versions[base_id] += 1
-                                    versioned_id = f"{base_id}_v{signal_versions[base_id]}"
-
-                                    # Update the ID to the versioned one
-                                    signal['id'] = versioned_id
-
-                                    # Register the new versioned signal
-                                    signal_registry[versioned_id] = signal
-
-                                    # Register which command this signal appears in
-                                    if versioned_id not in signal_commands:
-                                        signal_commands[versioned_id] = []
-                                    signal_commands[versioned_id].append(cmd_id)
-
-                                    # Record origin of this versioned signal
-                                    signal_origins[versioned_id] = [source_info]
-
-                                    # Also add this source to the original signal's origins
-                                    if base_id in signal_origins:
-                                        if source_info["repo"] not in [src["repo"] for src in signal_origins[base_id]]:
-                                            signal_origins[base_id].append(source_info)
+                                # Skip duplicate signals with identical definitions
+                                # Still record this repo as a source for the signal
+                                if base_id in signal_origins:
+                                    if source_info["repo"] not in [src["repo"] for src in signal_origins[base_id]]:
+                                        signal_origins[base_id].append(source_info)
+                                continue
                             else:
                                 # Signal with same ID but different definition
                                 # Add a version suffix to the ID
@@ -201,11 +171,6 @@ def merge_signalsets(signalset_files, make, model, signal_prefix=None):
                                 # Register the new versioned signal
                                 signal_registry[versioned_id] = signal
 
-                                # Register which command this signal appears in
-                                if versioned_id not in signal_commands:
-                                    signal_commands[versioned_id] = []
-                                signal_commands[versioned_id].append(cmd_id)
-
                                 # Record origin of this versioned signal
                                 signal_origins[versioned_id] = [source_info]
                         else:
@@ -218,11 +183,6 @@ def merge_signalsets(signalset_files, make, model, signal_prefix=None):
 
                             # Register the signal
                             signal_registry[base_id] = signal
-
-                            # Register which command this signal appears in
-                            if base_id not in signal_commands:
-                                signal_commands[base_id] = []
-                            signal_commands[base_id].append(cmd_id)
 
                             # Record origin of this signal
                             signal_origins[base_id] = [source_info]
