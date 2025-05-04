@@ -78,21 +78,7 @@ def are_signals_equal(signal1, signal2):
         s1_compare.pop(field, None)
         s2_compare.pop(field, None)
 
-    # Additional check for format specifications that must be exactly the same
-    # Get the format specifications
-    fmt1 = s1_compare.get('fmt', {})
-    fmt2 = s2_compare.get('fmt', {})
-
-    # If both have format specs, ensure key parameters match exactly
-    critical_fmt_params = ['len', 'bix', 'min', 'max', 'mul', 'div', 'add', 'unit']
-
-    for param in critical_fmt_params:
-        # If either has the parameter and they don't match, signals are different
-        if param in fmt1 or param in fmt2:
-            if fmt1.get(param) != fmt2.get(param):
-                return False
-
-    # Compare all other attributes
+    # Compare core definition attributes
     return json.dumps(s1_compare, sort_keys=True) == json.dumps(s2_compare, sort_keys=True)
 
 def merge_signalsets(signalset_files, make, model, signal_prefix=None):
@@ -111,7 +97,6 @@ def merge_signalsets(signalset_files, make, model, signal_prefix=None):
     signal_registry = {}  # Maps signal ID to its definition
     signal_versions = {}  # Tracks version numbers for signals with same base ID
     signal_origins = {}   # Track where each signal came from
-    cmd_signal_map = {}   # Maps command IDs to sets of signal IDs they contain
 
     for signalset_path in signalset_files:
         with open(signalset_path) as f:
@@ -208,9 +193,6 @@ def merge_signalsets(signalset_files, make, model, signal_prefix=None):
                 # Replace the signals array with our processed version
                 cmd['signals'] = new_signals
 
-                # Track which signals are included in this command
-                cmd_signal_map[cmd_id] = {s.get('id') for s in new_signals if s.get('id')}
-
             if cmd_id in command_map:
                 # Merge signals if command already exists
                 existing_cmd = command_map[cmd_id]
@@ -224,40 +206,6 @@ def merge_signalsets(signalset_files, make, model, signal_prefix=None):
                 # Add new command
                 command_map[cmd_id] = cmd
                 merged_signalset["commands"].append(cmd)
-
-    # Final pass to ensure signal IDs are unique across all commands
-    for cmd in merged_signalset["commands"]:
-        hdr = cmd.get('hdr', '')
-        eax = cmd.get('eax', '')
-        sid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
-        if sid != '21' and sid != '22':
-            continue  # Only aggregate service 21/22 commands; all other services are standardized.
-        pid = cmd.get('cmd', {}).get(sid, None)
-        cmd_id = f"{hdr}:{eax}:{sid}:{pid}"
-
-        if 'signals' in cmd:
-            for i, signal in enumerate(cmd['signals']):
-                signal_id = signal.get('id', '')
-                if not signal_id:
-                    continue
-
-                # If this signal ID appears in multiple commands, version it
-                signal_commands = [c_id for c_id, s_ids in cmd_signal_map.items() if signal_id in s_ids]
-
-                # If this signal ID appears in multiple commands, version it (except for the first occurrence)
-                if len(signal_commands) > 1 and cmd_id != signal_commands[0]:
-                    original_id = signal_id
-
-                    # Find position in occurrence list to determine version number
-                    version_num = signal_commands.index(cmd_id) + 1
-                    versioned_id = f"{original_id}_v{version_num}"
-
-                    # Update the signal ID
-                    cmd['signals'][i]['id'] = versioned_id
-
-                    # Update the name if it contains the original ID
-                    if 'name' in signal and original_id in signal['name']:
-                        cmd['signals'][i]['name'] = signal['name'].replace(original_id, versioned_id)
 
     # Add signal origins to the result
     merged_signalset["_signal_origins"] = signal_origins
