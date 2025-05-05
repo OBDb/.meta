@@ -7,7 +7,6 @@ import sys
 from pathlib import Path
 
 from .processor import merge_signalsets, ensure_unique_signal_ids
-from .model_years import load_model_year_data, save_model_year_data
 from .provenance import generate_provenance_report
 from .utils import calculate_hash
 
@@ -21,10 +20,8 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, s
     global_signal_origins = {}
     global_command_origins = {}
 
-    model_year_data = []
     temp_output_path = Path(output_dir) / 'merged_signalset_temp.json'
     final_output_path = Path(output_dir) / 'merged_signalset.json'
-    model_years_output_path = Path(output_dir) / 'model_years_data.json'
     provenance_report_path = Path(output_dir) / 'signal_provenance_report.json'
 
     # Organize repositories by filter priority
@@ -87,12 +84,6 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, s
                 "model": model,
                 "priority": group_idx  # Track which filter group this repo matched
             }
-
-            # Check for model year PID support data
-            my_data = load_model_year_data(repo_dir, make, model)
-            if my_data:
-                model_year_data.append(my_data)
-                print(f"  Found model year PID data for {make} {model}")
 
         # Print summary of repos found in this filter group
         filter_desc = ", ".join(group_filters) if group_filters else "all repositories"
@@ -229,9 +220,6 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, s
             print(f"Error validating JSON: {e}")
             # Fall back to raw output if validation fails
             shutil.move(temp_output_path, final_output_path)
-
-    # Save model year data with custom formatting
-    save_model_year_data(model_year_data, model_years_output_path)
 
     # Generate the provenance report
     print(f"Generating signal provenance report...")
