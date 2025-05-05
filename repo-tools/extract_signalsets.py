@@ -84,7 +84,7 @@ def are_signals_equal(signal1, signal2):
 def process_signalsets(loaded_signalsets, make, model, signal_prefix=None):
     """
     Process multiple loaded signalset objects into a single unified signalset structure.
-    Combines commands and signals from all input datasets.
+    Combines commands and signals from all input datasets for a given make/model.
 
     Args:
         loaded_signalsets: List of tuples, each containing (signalset_data, filename)
@@ -104,7 +104,6 @@ def process_signalsets(loaded_signalsets, make, model, signal_prefix=None):
 
     # Track signals by their ID to detect conflicts
     signal_registry = {}  # Maps signal ID to its definition
-    signal_versions = {}  # Tracks version numbers for signals with same base ID
     signal_origins = {}   # Track where each signal came from
 
     # Track which commands a signal appears in to avoid dropping duplicates used in different commands
@@ -150,6 +149,7 @@ def process_signalsets(loaded_signalsets, make, model, signal_prefix=None):
                         base_id = original_id
                         if signal_prefix:
                             base_id = replace_signal_prefix(original_id, signal_prefix)
+                        signal['id'] = base_id
 
                         # Initialize signal command usage tracking if needed
                         if base_id not in signal_command_usage:
@@ -163,52 +163,35 @@ def process_signalsets(loaded_signalsets, make, model, signal_prefix=None):
                             # Check if the existing signal has the same definition
                             if are_signals_equal(signal, signal_registry[base_id]):
                                 # Keep track that this signal is used in this command
-                                signal_command_usage[base_id].add(cmd_id)
+                                signal_command_usage[signal['id']].add(cmd_id)
 
                                 # Record this repo as a source for the signal
-                                if base_id in signal_origins:
-                                    if source_info["repo"] not in [src["repo"] for src in signal_origins[base_id]]:
-                                        signal_origins[base_id].append(source_info)
-
-                                # Update the ID
-                                signal['id'] = base_id
+                                if signal['id'] in signal_origins:
+                                    if source_info["repo"] not in [src["repo"] for src in signal_origins[signal['id']]]:
+                                        signal_origins[signal['id']].append(source_info)
 
                                 if not signal_already_in_command:
                                     new_signals.append(signal)
                                 continue
                             else:
-                                # Signal with same ID but different definition
-                                # Add a version suffix to the ID
-                                if base_id not in signal_versions:
-                                    signal_versions[base_id] = 1  # First conflict means version 2
-
-                                signal_versions[base_id] += 1
-                                versioned_id = f"{base_id}_v{signal_versions[base_id]}"
-
-                                # Update the ID
-                                signal['id'] = versioned_id
-
                                 # Register the new versioned signal
-                                signal_registry[versioned_id] = signal
+                                signal_registry[signal['id']] = signal
 
                                 # Initialize command usage tracking for the versioned ID
-                                if versioned_id not in signal_command_usage:
-                                    signal_command_usage[versioned_id] = set()
-                                signal_command_usage[versioned_id].add(cmd_id)
+                                if signal['id'] not in signal_command_usage:
+                                    signal_command_usage[signal['id']] = set()
+                                signal_command_usage[signal['id']].add(cmd_id)
 
                                 # Record origin of this versioned signal
-                                signal_origins[versioned_id] = [source_info]
+                                signal_origins[signal['id']] = [source_info]
                         else:
-                            # New signal or signal already used in another command
-                            signal['id'] = base_id
-
                             # Register the signal if it's new
-                            if base_id not in signal_registry:
-                                signal_registry[base_id] = signal
-                                signal_origins[base_id] = [source_info]
+                            if signal['id'] not in signal_registry:
+                                signal_registry[signal['id']] = signal
+                                signal_origins[signal['id']] = [source_info]
 
                             # Track this command using the signal
-                            signal_command_usage[base_id].add(cmd_id)
+                            signal_command_usage[signal['id']].add(cmd_id)
 
                     # Add this signal to our new signals list
                     new_signals.append(signal)
@@ -268,6 +251,75 @@ def calculate_hash(data):
     # Convert to a string and hash
     data_str = json.dumps(data, sort_keys=True)
     return hashlib.sha256(data_str.encode()).hexdigest()
+
+def ensure_unique_signal_ids(merged_signalset):
+    """
+    Ensure all signal IDs in the merged signalset are globally unique by adding version suffixes.
+
+    For duplicate signal IDs that have different definitions, this function adds
+    version suffixes (_V2, _V3, etc.) to ensure uniqueness.
+
+    Args:
+        merged_signalset: Dictionary containing commands and signals
+
+    Returns:
+        Dictionary with updated signal IDs ensuring global uniqueness
+    """
+    # Track all signal IDs and their definitions encountered so far
+    signal_registry = {}  # Maps original ID to list of (versioned_id, definition) tuples
+
+    # Process each command
+    for cmd in merged_signalset.get("commands", []):
+        if "signals" not in cmd:
+            continue
+
+        new_signals = []
+        for signal in cmd["signals"]:
+            if "id" not in signal:
+                # Keep signals without IDs unchanged
+                new_signals.append(signal)
+                continue
+
+            original_id = signal["id"]
+            signal_def = signal.copy()
+
+            # Remove ID field for comparison purposes
+            comparison_def = signal_def.copy()
+            if "id" in comparison_def:
+                del comparison_def["id"]
+
+            # Check if we've seen this signal ID before
+            if original_id in signal_registry:
+                # Always create a new versioned ID for duplicate signal IDs across different commands
+                # regardless of whether the definition is identical
+                version = len(signal_registry[original_id]) + 1
+                versioned_id = f"{original_id}_V{version}"
+                signal["id"] = versioned_id
+
+                # Store this new version
+                signal_registry[original_id].append((versioned_id, comparison_def))
+                new_signals.append(signal)
+            else:
+                # First time seeing this ID
+                signal_registry[original_id] = [(original_id, comparison_def)]
+                new_signals.append(signal)
+
+        # Replace the command's signals with our processed list
+        cmd["signals"] = new_signals
+
+    # Update signal origins if present
+    if "_signal_origins" in merged_signalset:
+        new_origins = {}
+        for original_id, versions in signal_registry.items():
+            # Copy the origin info to each versioned ID
+            if original_id in merged_signalset["_signal_origins"]:
+                for versioned_id, _ in versions:
+                    new_origins[versioned_id] = merged_signalset["_signal_origins"][original_id]
+
+        # Replace the original origins with our expanded version
+        merged_signalset["_signal_origins"] = new_origins
+
+    return merged_signalset
 
 def generate_provenance_report(signal_origins, cmd_origins, output_path):
     """
@@ -646,6 +698,10 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, s
 
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
+
+    # Ensure unique signal IDs
+    print("Ensuring globally unique signal IDs...")
+    merged_signalset = ensure_unique_signal_ids(merged_signalset)
 
     # Check if we need to update the file
     current_hash = calculate_hash(merged_signalset)

@@ -218,7 +218,7 @@ class TestExtractSignalsets(unittest.TestCase):
                 ]},
                 { "hdr": "747", "rax": "74F", "fcm1": True, "dbg": True, "cmd": {"22": "0103"}, "freq": 10,
                 "signals": [
-                    {"id": "TOYOTA_ODO_V2", "path": "Trips", "fmt": {"bix": 8, "len": 24, "max": 16777215, "unit": "kilometers" }, "name": "Odometer", "suggestedMetric": "odometer"}
+                    {"id": "TOYOTA_ODO", "path": "Trips", "fmt": {"bix": 8, "len": 24, "max": 16777215, "unit": "kilometers" }, "name": "Odometer", "suggestedMetric": "odometer"}
                 ]},
             ]
         })
