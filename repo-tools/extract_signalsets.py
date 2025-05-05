@@ -46,7 +46,7 @@ def load_model_year_data(repo_dir, make, model):
         print(f"Error loading model year data for {make}-{model}: {e}")
         return None
 
-def replace_signal_prefix(signal_id, make, model, new_prefix):
+def replace_signal_prefix(signal_id, new_prefix):
     """
     Replace the vehicle-specific prefix of a signal ID with a new prefix.
     Example: 'RAV4_VSS' becomes 'TOYOTA_VSS' if new_prefix is 'TOYOTA'
@@ -81,10 +81,19 @@ def are_signals_equal(signal1, signal2):
     # Compare core definition attributes
     return json.dumps(s1_compare, sort_keys=True) == json.dumps(s2_compare, sort_keys=True)
 
-def merge_signalsets(signalset_files, make, model, signal_prefix=None):
+def process_signalsets(loaded_signalsets, make, model, signal_prefix=None):
     """
-    Merge multiple signalset files into a single unified signalset structure.
-    Combines commands and signals from all input files.
+    Process multiple loaded signalset objects into a single unified signalset structure.
+    Combines commands and signals from all input datasets.
+
+    Args:
+        loaded_signalsets: List of tuples, each containing (signalset_data, filename)
+        make: The vehicle make
+        model: The vehicle model
+        signal_prefix: Optional prefix to replace vehicle-specific signal prefixes
+
+    Returns:
+        A merged signalset dictionary containing all commands and signals
     """
     merged_signalset = {
         "commands": []
@@ -98,25 +107,22 @@ def merge_signalsets(signalset_files, make, model, signal_prefix=None):
     signal_versions = {}  # Tracks version numbers for signals with same base ID
     signal_origins = {}   # Track where each signal came from
 
-    for signalset_path in signalset_files:
-        with open(signalset_path) as f:
-            data = json.load(f)
-
+    for signalset_data, filename in loaded_signalsets:
         # Track source file
         source_info = {
-            "file": signalset_path.name,
+            "file": filename,
             "make": make,
             "model": model,
             "repo": f"{make}-{model}"
         }
 
         # Extract year range from filename if available
-        years = extract_year_range_from_filename(signalset_path.name)
+        years = extract_year_range_from_filename(filename)
         if years:
             source_info["yearRange"] = {"start": years[0], "end": years[1]}
 
         # Process commands
-        for cmd in data.get('commands', []):
+        for cmd in signalset_data.get('commands', []):
             # Create a unique identifier for this command
             hdr = cmd.get('hdr', '')
             eax = cmd.get('eax', '')
@@ -140,7 +146,7 @@ def merge_signalsets(signalset_files, make, model, signal_prefix=None):
                         # Replace the prefix in the signal ID if needed
                         base_id = original_id
                         if signal_prefix:
-                            base_id = replace_signal_prefix(original_id, make, model, signal_prefix)
+                            base_id = replace_signal_prefix(original_id, signal_prefix)
 
                         # Check for signal conflicts
                         if base_id in signal_registry:
@@ -211,6 +217,34 @@ def merge_signalsets(signalset_files, make, model, signal_prefix=None):
     merged_signalset["_signal_origins"] = signal_origins
 
     return merged_signalset
+
+def merge_signalsets(signalset_files, make, model, signal_prefix=None):
+    """
+    Merge multiple signalset files into a single unified signalset structure.
+    Combines commands and signals from all input files.
+
+    Args:
+        signalset_files: List of Path objects to signalset JSON files
+        make: The vehicle make
+        model: The vehicle model
+        signal_prefix: Optional prefix to replace vehicle-specific signal prefixes
+
+    Returns:
+        A merged signalset dictionary containing all commands and signals
+    """
+    # Load all the signalset files first
+    loaded_signalsets = []
+    for signalset_path in signalset_files:
+        try:
+            with open(signalset_path) as f:
+                data = json.load(f)
+                loaded_signalsets.append((data, signalset_path.name))
+        except Exception as e:
+            print(f"Error loading signalset file {signalset_path}: {e}")
+            continue
+
+    # Process the loaded signalsets
+    return process_signalsets(loaded_signalsets, make, model, signal_prefix)
 
 def calculate_hash(data):
     """Calculate a hash from the sorted and normalized data for easy comparison."""

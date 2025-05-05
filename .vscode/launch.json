@@ -1,0 +1,29 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Python: Run Tests",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/repo-tools/tests/run_tests.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Python: Extract SignalSets Tests",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/repo-tools/tests/test_extract_signalsets.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        }
+    ]
+}
