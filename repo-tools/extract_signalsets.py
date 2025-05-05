@@ -107,6 +107,9 @@ def process_signalsets(loaded_signalsets, make, model, signal_prefix=None):
     signal_versions = {}  # Tracks version numbers for signals with same base ID
     signal_origins = {}   # Track where each signal came from
 
+    # Track which commands a signal appears in to avoid dropping duplicates used in different commands
+    signal_command_usage = {}  # Maps signal ID to set of command IDs it appears in
+
     for signalset_data, filename in loaded_signalsets:
         # Track source file
         source_info = {
@@ -148,15 +151,30 @@ def process_signalsets(loaded_signalsets, make, model, signal_prefix=None):
                         if signal_prefix:
                             base_id = replace_signal_prefix(original_id, signal_prefix)
 
+                        # Initialize signal command usage tracking if needed
+                        if base_id not in signal_command_usage:
+                            signal_command_usage[base_id] = set()
+
+                        # Check if this signal is already used in this command
+                        signal_already_in_command = cmd_id in signal_command_usage[base_id]
+
                         # Check for signal conflicts
                         if base_id in signal_registry:
                             # Check if the existing signal has the same definition
                             if are_signals_equal(signal, signal_registry[base_id]):
-                                # Skip duplicate signals with identical definitions
-                                # Still record this repo as a source for the signal
+                                # Keep track that this signal is used in this command
+                                signal_command_usage[base_id].add(cmd_id)
+
+                                # Record this repo as a source for the signal
                                 if base_id in signal_origins:
                                     if source_info["repo"] not in [src["repo"] for src in signal_origins[base_id]]:
                                         signal_origins[base_id].append(source_info)
+
+                                # Update the ID
+                                signal['id'] = base_id
+
+                                if not signal_already_in_command:
+                                    new_signals.append(signal)
                                 continue
                             else:
                                 # Signal with same ID but different definition
@@ -170,28 +188,27 @@ def process_signalsets(loaded_signalsets, make, model, signal_prefix=None):
                                 # Update the ID
                                 signal['id'] = versioned_id
 
-                                # Update name if it contains the original ID
-                                if 'name' in signal and original_id in signal['name']:
-                                    signal['name'] = signal['name'].replace(original_id, versioned_id)
-
                                 # Register the new versioned signal
                                 signal_registry[versioned_id] = signal
+
+                                # Initialize command usage tracking for the versioned ID
+                                if versioned_id not in signal_command_usage:
+                                    signal_command_usage[versioned_id] = set()
+                                signal_command_usage[versioned_id].add(cmd_id)
 
                                 # Record origin of this versioned signal
                                 signal_origins[versioned_id] = [source_info]
                         else:
-                            # New signal, no conflicts
+                            # New signal or signal already used in another command
                             signal['id'] = base_id
 
-                            # Update name if using new prefix
-                            if signal_prefix and original_id != base_id and 'name' in signal and original_id in signal['name']:
-                                signal['name'] = signal['name'].replace(original_id, base_id)
+                            # Register the signal if it's new
+                            if base_id not in signal_registry:
+                                signal_registry[base_id] = signal
+                                signal_origins[base_id] = [source_info]
 
-                            # Register the signal
-                            signal_registry[base_id] = signal
-
-                            # Record origin of this signal
-                            signal_origins[base_id] = [source_info]
+                            # Track this command using the signal
+                            signal_command_usage[base_id].add(cmd_id)
 
                     # Add this signal to our new signals list
                     new_signals.append(signal)

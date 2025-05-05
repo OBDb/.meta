@@ -180,6 +180,7 @@ class TestExtractSignalsets(unittest.TestCase):
             'commands': [
                 { "hdr": "701", "rax": "709", "dbg": True, "cmd": {"22": "0103"}, "freq": 10,
                 "signals": [
+                    {"id": "CAMRY_ODO", "path": "Trips", "fmt": {"bix": 8, "len": 24, "max": 16777215, "unit": "kilometers" }, "name": "Odometer", "suggestedMetric": "odometer"},
                     {"id": "CAMRY_ODO", "path": "Trips", "fmt": {"bix": 8, "len": 24, "max": 16777215, "unit": "kilometers" }, "name": "Odometer", "suggestedMetric": "odometer"}
                 ]},
             ]
