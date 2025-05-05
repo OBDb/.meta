@@ -5,7 +5,7 @@
     "python.testing.unittestArgs": [
         "-v",
         "-s",
-        "./repo-tools/tests",
+        "./repo-tools",
         "-p",
         "test_*.py"
     ],
