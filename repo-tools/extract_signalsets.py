@@ -16,6 +16,7 @@ def main():
     parser.add_argument('--fetch', action='store_true', help='Fetch/update repositories before extraction')
     parser.add_argument('--force', action='store_true', help='Force update even if no changes detected')
     parser.add_argument('--filter-prefix', action='append', help='Filter repositories to only those with the specified prefix (can be used multiple times)')
+    parser.add_argument('--filter-prefix-exclusion', action='append', help='Exclude repositories with the specified prefix (can be used multiple times)')
     parser.add_argument('--signal-prefix', help='Replace vehicle-specific signal ID prefixes with this prefix')
     args = parser.parse_args()
 
@@ -34,6 +35,7 @@ def main():
         output_dir=args.output,
         force=args.force,
         filter_prefixes=args.filter_prefix,
+        filter_prefix_exclusions=args.filter_prefix_exclusion,
         signal_prefix=args.signal_prefix
     )
 

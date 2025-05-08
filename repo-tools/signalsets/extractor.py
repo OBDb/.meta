@@ -10,8 +10,17 @@ from .processor import merge_signalsets, ensure_unique_signal_ids
 from .provenance import generate_provenance_report
 from .utils import calculate_hash
 
-def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, signal_prefix=None):
-    """Extract and merge signalset data from all repositories."""
+def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, filter_prefix_exclusions=None, signal_prefix=None):
+    """Extract and merge signalset data from all repositories.
+
+    Args:
+        workspace_dir: Directory containing repositories
+        output_dir: Directory to save merged signalset and reports
+        force: Force update even if no changes detected
+        filter_prefixes: Optional list of prefixes to include
+        filter_prefix_exclusions: Optional list of prefixes to exclude
+        signal_prefix: Optional prefix to replace vehicle-specific signal prefixes
+    """
     merged_signalset = {
         "commands": []
     }
@@ -51,6 +60,11 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, s
                 if not any(repo_dir.name.startswith(prefix) for prefix in group_filters):
                     continue
 
+            # Skip repositories that match any exclusion pattern
+            if filter_prefix_exclusions and any(repo_dir.name.startswith(prefix) for prefix in filter_prefix_exclusions):
+                print(f"Excluding {repo_dir.name} based on exclusion filter")
+                continue
+
             # Skip repositories already processed by previous filter groups
             if repo_dir.name in all_repos:
                 continue
@@ -87,7 +101,8 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, s
 
         # Print summary of repos found in this filter group
         filter_desc = ", ".join(group_filters) if group_filters else "all repositories"
-        print(f"Processing filter group {group_idx+1}: {filter_desc} ({len(repos_in_group)} repositories)")
+        exclusion_desc = f" (excluding: {', '.join(filter_prefix_exclusions)})" if filter_prefix_exclusions else ""
+        print(f"Processing filter group {group_idx+1}: {filter_desc}{exclusion_desc} ({len(repos_in_group)} repositories)")
 
         # Process repositories within this filter group in a sorted order
         for repo_name in sorted(repos_in_group.keys()):
