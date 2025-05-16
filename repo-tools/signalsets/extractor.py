@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .processor import merge_signalsets, ensure_unique_signal_ids
 from .provenance import generate_provenance_report
-from .utils import calculate_hash, get_command_id
+from .utils import are_signals_equal, calculate_hash, get_command_id
 
 def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, filter_prefix_exclusions=None, signal_prefix=None):
     """Extract and merge signalset data from all repositories.
@@ -177,6 +177,12 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, f
                         if signal_id and signal_id not in existing_signal_ids:
                             if 'signals' not in existing_cmd:
                                 existing_cmd['signals'] = []
+
+                            # If the existing command contains a signal that is equal to this one, skip it
+                            if any(are_signals_equal(signal, s) for s in existing_cmd['signals']):
+                                print(f"Skipping duplicate signal {signal_id} in command {cmd_id}")
+                                continue
+
                             existing_cmd['signals'].append(signal)
                             existing_signal_ids.add(signal_id)
                 else:

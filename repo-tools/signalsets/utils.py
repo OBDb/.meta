@@ -48,7 +48,7 @@ def are_signals_equal(signal1, signal2):
     s2_compare = signal2.copy()
 
     # Fields that shouldn't affect equality comparison
-    exclude_fields = ['id', 'name', 'description', 'path', 'comment']
+    exclude_fields = ['id', 'name', 'description', 'path']
 
     for field in exclude_fields:
         s1_compare.pop(field, None)
