@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-from .utils import are_signals_equal, replace_signal_prefix, extract_year_range_from_filename
+from .utils import are_signals_equal, replace_signal_prefix, extract_year_range_from_filename, get_command_id
 
 def process_signalsets(loaded_signalsets, make, model, signal_prefix=None):
     """
@@ -49,17 +49,9 @@ def process_signalsets(loaded_signalsets, make, model, signal_prefix=None):
         # Process commands
         for cmd in signalset_data.get('commands', []):
             # Create a unique identifier for this command
-            hdr = cmd.get('hdr', '')
-            eax = cmd.get('eax', '')
-            sid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
-            if sid != '21' and sid != '22':
+            cmd_id = get_command_id(cmd)
+            if cmd_id is None:
                 continue  # Only aggregate service 21/22 commands; all other services are standardized.
-            pid = cmd.get('cmd', {}).get(sid, None)
-            if 'filter' in cmd:
-                filter = json.dumps(cmd['filter'])
-            else:
-                filter = ''
-            cmd_id = f"{hdr}:{eax}:{sid}:{pid}:{filter}"
 
             # Ensure debug flag exists
             if 'dbg' not in cmd:

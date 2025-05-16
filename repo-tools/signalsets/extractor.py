@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .processor import merge_signalsets, ensure_unique_signal_ids
 from .provenance import generate_provenance_report
-from .utils import calculate_hash
+from .utils import calculate_hash, get_command_id
 
 def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, filter_prefix_exclusions=None, signal_prefix=None):
     """Extract and merge signalset data from all repositories.
@@ -127,17 +127,9 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, f
 
             # Process and track commands from this repo
             for cmd in repo_signalset.get("commands", []):
-                hdr = cmd.get('hdr', '')
-                eax = cmd.get('eax', '')
-                sid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
-                if sid != '21' and sid != '22':
+                cmd_id = get_command_id(cmd)
+                if cmd_id is None:
                     continue  # Only aggregate service 21/22 commands; all other services are standardized.
-                pid = cmd.get('cmd', {}).get(sid, None)
-                if 'filter' in cmd:
-                    filter = json.dumps(cmd['filter'])
-                else:
-                    filter = ''
-                cmd_id = f"{hdr}:{eax}:{sid}:{pid}:{filter}"
 
                 # Build command source information
                 cmd_source = {
@@ -161,31 +153,16 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, f
             # Create a mapping of command IDs to commands in the merged signalset
             command_map = {}
             for idx, cmd in enumerate(merged_signalset["commands"]):
-                hdr = cmd.get('hdr', '')
-                eax = cmd.get('eax', '')
-                sid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
-                if sid != '21' and sid != '22':
+                cmd_id = get_command_id(cmd)
+                if cmd_id is None:
                     continue  # Only aggregate service 21/22 commands; all other services are standardized.
-                pid = cmd.get('cmd', {}).get(sid, None)
-                if 'filter' in cmd:
-                    filter = json.dumps(cmd['filter'])
-                else:
-                    filter = ''
-                cmd_id = f"{hdr}:{eax}:{sid}:{pid}:{filter}"
+                command_map[cmd_id] = idx
 
             # Add commands or merge signals for existing commands
             for cmd in repo_signalset["commands"]:
-                hdr = cmd.get('hdr', '')
-                eax = cmd.get('eax', '')
-                sid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
-                if sid != '21' and sid != '22':
+                cmd_id = get_command_id(cmd)
+                if cmd_id is None:
                     continue  # Only aggregate service 21/22 commands; all other services are standardized.
-                pid = cmd.get('cmd', {}).get(sid, None)
-                if 'filter' in cmd:
-                    filter = json.dumps(cmd['filter'])
-                else:
-                    filter = ''
-                cmd_id = f"{hdr}:{eax}:{sid}:{pid}:{filter}"
 
                 if cmd_id in command_map:
                     # Command exists, merge signals

@@ -56,3 +56,32 @@ def are_signals_equal(signal1, signal2):
 
     # Compare core definition attributes
     return json.dumps(s1_compare, sort_keys=True) == json.dumps(s2_compare, sort_keys=True)
+
+def get_command_id(cmd):
+    """
+    Generate a unique command identifier from a command object.
+
+    Args:
+        cmd: The command object containing hdr, eax, cmd, and optionally filter fields
+
+    Returns:
+        A string identifier in the format "hdr:eax:sid:pid:filter"
+        Only aggregates service 21/22 commands as others are standardized.
+    """
+    hdr = cmd.get('hdr', '')
+    eax = cmd.get('eax', '')
+    sid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
+
+    # Check if this is a service 21 or 22 command
+    if sid != '21' and sid != '22':
+        return None  # Return None for non-21/22 services
+
+    pid = cmd.get('cmd', {}).get(sid, None)
+
+    # Handle filter if present
+    if 'filter' in cmd:
+        filter_str = json.dumps(cmd['filter'])
+    else:
+        filter_str = ''
+
+    return f"{hdr}:{eax}:{sid}:{pid}:{filter_str}"
