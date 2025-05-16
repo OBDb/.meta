@@ -62,8 +62,6 @@ def process_signalsets(loaded_signalsets, make, model, signal_prefix=None):
                 cmd['dbg'] = True
 
             # Delete filters
-            if 'filter' in cmd:
-                del cmd['filter']
             if 'dbgfilter' in cmd:
                 del cmd['dbgfilter']
 
