@@ -55,11 +55,19 @@ def process_signalsets(loaded_signalsets, make, model, signal_prefix=None):
             if sid != '21' and sid != '22':
                 continue  # Only aggregate service 21/22 commands; all other services are standardized.
             pid = cmd.get('cmd', {}).get(sid, None)
-            cmd_id = f"{hdr}:{eax}:{sid}:{pid}"
+            if 'filter' in cmd:
+                filter = json.dumps(cmd['filter'])
+            else:
+                filter = ''
+            cmd_id = f"{hdr}:{eax}:{sid}:{pid}:{filter}"
 
             # Ensure debug flag exists
             if 'dbg' not in cmd:
                 cmd['dbg'] = True
+
+            # Delete filters
+            if 'dbgfilter' in cmd:
+                del cmd['dbgfilter']
 
             # Process signals and replace their prefix if needed
             if 'signals' in cmd:
@@ -86,35 +94,35 @@ def process_signalsets(loaded_signalsets, make, model, signal_prefix=None):
                             # Check if the existing signal has the same definition
                             if are_signals_equal(signal, signal_registry[base_id]):
                                 # Keep track that this signal is used in this command
-                                signal_command_usage[signal['id']].add(cmd_id)
+                                signal_command_usage[base_id].add(cmd_id)
 
                                 # Record this repo as a source for the signal
-                                if signal['id'] in signal_origins:
-                                    if source_info["repo"] not in [src["repo"] for src in signal_origins[signal['id']]]:
-                                        signal_origins[signal['id']].append(source_info)
+                                if base_id in signal_origins:
+                                    if source_info["repo"] not in [src["repo"] for src in signal_origins[base_id]]:
+                                        signal_origins[base_id].append(source_info)
 
                                 if not signal_already_in_command:
                                     new_signals.append(signal)
                                 continue
                             else:
                                 # Register the new versioned signal
-                                signal_registry[signal['id']] = signal
+                                signal_registry[base_id] = signal
 
                                 # Initialize command usage tracking for the versioned ID
-                                if signal['id'] not in signal_command_usage:
-                                    signal_command_usage[signal['id']] = set()
-                                signal_command_usage[signal['id']].add(cmd_id)
+                                if base_id not in signal_command_usage:
+                                    signal_command_usage[base_id] = set()
+                                signal_command_usage[base_id].add(cmd_id)
 
                                 # Record origin of this versioned signal
-                                signal_origins[signal['id']] = [source_info]
+                                signal_origins[base_id] = [source_info]
                         else:
                             # Register the signal if it's new
-                            if signal['id'] not in signal_registry:
-                                signal_registry[signal['id']] = signal
-                                signal_origins[signal['id']] = [source_info]
+                            if base_id not in signal_registry:
+                                signal_registry[base_id] = signal
+                                signal_origins[base_id] = [source_info]
 
                             # Track this command using the signal
-                            signal_command_usage[signal['id']].add(cmd_id)
+                            signal_command_usage[base_id].add(cmd_id)
 
                     # Add this signal to our new signals list
                     new_signals.append(signal)
