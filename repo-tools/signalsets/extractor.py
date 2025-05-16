@@ -133,7 +133,11 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, f
                 if sid != '21' and sid != '22':
                     continue  # Only aggregate service 21/22 commands; all other services are standardized.
                 pid = cmd.get('cmd', {}).get(sid, None)
-                cmd_id = f"{hdr}:{eax}:{sid}:{pid}"
+                if 'filter' in cmd:
+                    filter = json.dumps(cmd['filter'])
+                else:
+                    filter = ''
+                cmd_id = f"{hdr}:{eax}:{sid}:{pid}:{filter}"
 
                 # Build command source information
                 cmd_source = {
@@ -163,8 +167,11 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, f
                 if sid != '21' and sid != '22':
                     continue  # Only aggregate service 21/22 commands; all other services are standardized.
                 pid = cmd.get('cmd', {}).get(sid, None)
-                cmd_id = f"{hdr}:{eax}:{sid}:{pid}"
-                command_map[cmd_id] = idx
+                if 'filter' in cmd:
+                    filter = json.dumps(cmd['filter'])
+                else:
+                    filter = ''
+                cmd_id = f"{hdr}:{eax}:{sid}:{pid}:{filter}"
 
             # Add commands or merge signals for existing commands
             for cmd in repo_signalset["commands"]:
@@ -174,7 +181,11 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, f
                 if sid != '21' and sid != '22':
                     continue  # Only aggregate service 21/22 commands; all other services are standardized.
                 pid = cmd.get('cmd', {}).get(sid, None)
-                cmd_id = f"{hdr}:{eax}:{sid}:{pid}"
+                if 'filter' in cmd:
+                    filter = json.dumps(cmd['filter'])
+                else:
+                    filter = ''
+                cmd_id = f"{hdr}:{eax}:{sid}:{pid}:{filter}"
 
                 if cmd_id in command_map:
                     # Command exists, merge signals
