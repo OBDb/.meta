@@ -55,19 +55,11 @@ def process_signalsets(loaded_signalsets, make, model, signal_prefix=None):
             if sid != '21' and sid != '22':
                 continue  # Only aggregate service 21/22 commands; all other services are standardized.
             pid = cmd.get('cmd', {}).get(sid, None)
-            if 'filter' in cmd:
-                filter = json.dumps(cmd['filter'])
-            else:
-                filter = ''
-            cmd_id = f"{hdr}:{eax}:{sid}:{pid}:{filter}"
+            cmd_id = f"{hdr}:{eax}:{sid}:{pid}"
 
             # Ensure debug flag exists
             if 'dbg' not in cmd:
                 cmd['dbg'] = True
-
-            # Delete filters
-            if 'dbgfilter' in cmd:
-                del cmd['dbgfilter']
 
             # Process signals and replace their prefix if needed
             if 'signals' in cmd:
