@@ -62,7 +62,7 @@ def get_command_id(cmd):
     Generate a unique command identifier from a command object.
 
     Args:
-        cmd: The command object containing hdr, eax, cmd, and optionally filter fields
+        cmd: The command object containing hdr, eax, cmd.
 
     Returns:
         A string identifier in the format "hdr:eax:sid:pid:filter"
@@ -70,6 +70,8 @@ def get_command_id(cmd):
     """
     hdr = cmd.get('hdr', '')
     eax = cmd.get('eax', '')
+    tst = cmd.get('tst', '')
+    pri = cmd.get('pri', '')
     sid = list(cmd.get('cmd', {}).keys())[0] if cmd.get('cmd') else ''
 
     # Check if this is a service 21 or 22 command
@@ -78,10 +80,4 @@ def get_command_id(cmd):
 
     pid = cmd.get('cmd', {}).get(sid, None)
 
-    # Handle filter if present
-    if 'filter' in cmd:
-        filter_str = json.dumps(cmd['filter'])
-    else:
-        filter_str = ''
-
-    return f"{hdr}:{eax}:{sid}:{pid}:{filter_str}"
+    return f"{hdr}:{eax}:{sid}:{pid}:{tst}:{pri}"

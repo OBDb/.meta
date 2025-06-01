@@ -60,6 +60,8 @@ def process_signalsets(loaded_signalsets, make, model, signal_prefix=None):
             # Delete filters
             if 'dbgfilter' in cmd:
                 del cmd['dbgfilter']
+            if 'filter' in cmd:
+                del cmd['filter']
 
             # Process signals and replace their prefix if needed
             if 'signals' in cmd:
