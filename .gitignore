@@ -2,3 +2,5 @@ venv/
 workbench/
 workspace/
 build/
+__pycache__
+*.pyc

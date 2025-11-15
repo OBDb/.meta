@@ -10,6 +10,43 @@ from .processor import merge_signalsets, ensure_unique_signal_ids
 from .provenance import generate_provenance_report
 from .utils import are_signals_equal, calculate_hash, get_command_id
 
+def extract_make_model_from_repo_name(repo_name):
+  """Extract make and model from repository name.
+
+  Handles special cases like "Land-Rover-Defender" where the make name contains hyphens.
+
+  Args:
+    repo_name: The repository directory name
+
+  Returns:
+    Tuple of (make, model) strings
+  """
+  # Handle special cases for makes with hyphens in their names
+  multi_word_makes = [
+    "Mercedes-Benz",
+    "Alfa-Romeo",
+    "Aston-Martin",
+    "Land-Rover",
+    "Rolls-Royce"
+  ]
+
+  for make in multi_word_makes:
+    if repo_name.startswith(make + "-"):
+      # Extract model as everything after the make and hyphen
+      model = repo_name[len(make) + 1:]
+      return make, model
+    elif repo_name == make:
+      # Repository is just the make name with no model
+      return make, ''
+
+  # Standard case: split on first hyphen
+  if '-' in repo_name:
+    make, model = repo_name.split('-', 1)
+    return make, model
+
+  # No hyphen: just a make name
+  return repo_name, ''
+
 def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, filter_prefix_exclusions=None, signal_prefix=None):
     """Extract and merge signalset data from all repositories.
 
@@ -75,7 +112,7 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, f
                 continue
 
             # Extract make and model from repo name
-            make, model = repo_dir.name.split('-', 1) if '-' in repo_dir.name else (repo_dir.name, '')
+            make, model = extract_make_model_from_repo_name(repo_dir.name)
 
             # Find all signalset files in the v3 directory
             signalset_files = list(signalsets_dir.glob('*.json'))
