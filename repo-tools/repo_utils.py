@@ -85,7 +85,7 @@ def clone_repos(org_name, workspace_dir, filter_prefixes=None):
     # Filter out excluded repos
     filtered_repos = [
         repo for repo in repos
-        if '.' not in repo
+        if not repo.startswith('.')
     ]
 
     # Apply prefix filters if specified
