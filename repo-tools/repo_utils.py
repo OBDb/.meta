@@ -5,7 +5,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import multiprocessing
 
-def handle_repo(org_name, repo, workspace_dir):
+def handle_repo(org_name, repo, workspace_dir, use_ssh=False):
     """
     Clone or update a single repository.
 
@@ -13,6 +13,7 @@ def handle_repo(org_name, repo, workspace_dir):
         org_name: GitHub organization name
         repo: Repository name
         workspace_dir: Directory to clone into
+        use_ssh: If True, clone using SSH protocol; otherwise use HTTPS
 
     Returns:
         bool: True if successful, False otherwise
@@ -20,9 +21,14 @@ def handle_repo(org_name, repo, workspace_dir):
     repo_path = Path(workspace_dir) / repo
     try:
         if not repo_path.exists():
-            # Clone new repository using SSH protocol
+            # Clone new repository
+            if use_ssh:
+                clone_url = f'git@github.com:{org_name}/{repo}.git'
+            else:
+                clone_url = f'{org_name}/{repo}'
+
             subprocess.run(
-                ['gh', 'repo', 'clone', f'git@github.com:{org_name}/{repo}.git', str(repo_path)],
+                ['gh', 'repo', 'clone', clone_url, str(repo_path)],
                 check=True,
                 capture_output=True,
                 text=True
@@ -50,7 +56,7 @@ def handle_repo(org_name, repo, workspace_dir):
         print(f"Error processing {repo}: {e.stderr}")
         return False
 
-def clone_repos(org_name, workspace_dir, filter_prefixes=None):
+def clone_repos(org_name, workspace_dir, filter_prefixes=None, use_ssh=False):
     """
     Clone all repositories from a GitHub organization using parallel processing.
 
@@ -58,6 +64,7 @@ def clone_repos(org_name, workspace_dir, filter_prefixes=None):
         org_name: GitHub organization name
         workspace_dir: Directory to clone repositories into
         filter_prefixes: Optional list of repository name prefixes to filter by
+        use_ssh: If True, clone using SSH protocol; otherwise use HTTPS
 
     Returns:
         tuple: (successful_count, failed_count)
@@ -111,7 +118,7 @@ def clone_repos(org_name, workspace_dir, filter_prefixes=None):
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         # Submit all tasks
         future_to_repo = {
-            executor.submit(handle_repo, org_name, repo, workspace_dir): repo
+            executor.submit(handle_repo, org_name, repo, workspace_dir, use_ssh): repo
             for repo in filtered_repos
         }
 

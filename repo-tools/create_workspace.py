@@ -14,9 +14,10 @@ def main():
     parser.add_argument('--org', default='OBDb', help='GitHub organization name')
     parser.add_argument('--workspace', default='workspace', help='Workspace directory for cloning repos')
     parser.add_argument('--filter-prefix', action='append', help='Filter repositories to only those with the specified prefix (can be used multiple times)')
+    parser.add_argument('--ssh', action='store_true', help='Clone repositories using SSH protocol instead of HTTPS')
     args = parser.parse_args()
 
-    clone_repos(args.org, args.workspace, args.filter_prefix)
+    clone_repos(args.org, args.workspace, args.filter_prefix, use_ssh=args.ssh)
 
 if __name__ == '__main__':
     main()
