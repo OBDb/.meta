@@ -20,9 +20,9 @@ def handle_repo(org_name, repo, workspace_dir):
     repo_path = Path(workspace_dir) / repo
     try:
         if not repo_path.exists():
-            # Clone new repository
+            # Clone new repository using SSH protocol
             subprocess.run(
-                ['gh', 'repo', 'clone', f'{org_name}/{repo}', str(repo_path)],
+                ['gh', 'repo', 'clone', f'git@github.com:{org_name}/{repo}.git', str(repo_path)],
                 check=True,
                 capture_output=True,
                 text=True
