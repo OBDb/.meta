@@ -4,6 +4,7 @@ import argparse
 import subprocess
 import time
 import json
+import shutil
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import multiprocessing
@@ -115,7 +116,44 @@ def copy_template_files(template_repo_path, vehicle_repo_path, files_to_copy):
 
     return copied_files
 
-def create_branch_and_pr(org_name, repo_name, repo_path, copied_files, branch_name, title, body):
+def delete_files(vehicle_repo_path, files_to_delete):
+    """
+    Delete specified files from vehicle repo.
+
+    Args:
+        vehicle_repo_path: Path to vehicle repository
+        files_to_delete: List of files/directories to delete
+
+    Returns:
+        list: List of files that were deleted (including nested files)
+    """
+    deleted_files = []
+
+    for file_path in files_to_delete:
+        target_path = vehicle_repo_path / file_path
+
+        if not target_path.exists():
+            print(f"Warning: {file_path} not found in vehicle repo, skipping deletion")
+            continue
+
+        if target_path.is_dir():
+            # Record all files that will be deleted
+            for file in target_path.glob('**/*'):
+                if file.is_file():
+                    rel_path = file.relative_to(vehicle_repo_path)
+                    deleted_files.append(str(rel_path))
+            # Remove the directory and all its contents
+            shutil.rmtree(target_path)
+            print(f"Deleted directory: {file_path}")
+        else:
+            # Delete single file
+            target_path.unlink()
+            deleted_files.append(file_path)
+            print(f"Deleted file: {file_path}")
+
+    return deleted_files
+
+def create_branch_and_pr(org_name, repo_name, repo_path, copied_files, branch_name, title, body, deleted_files=None):
     """
     Create a branch, commit changes, and open a PR with auto-merge enabled.
 
@@ -127,6 +165,7 @@ def create_branch_and_pr(org_name, repo_name, repo_path, copied_files, branch_na
         branch_name: Name of branch to create
         title: PR title
         body: PR description
+        deleted_files: List of files that were deleted (optional)
 
     Returns:
         str: PR URL or None if failed
@@ -166,6 +205,28 @@ def create_branch_and_pr(org_name, repo_name, repo_path, copied_files, branch_na
                 capture_output=True,
                 text=True
             )
+
+        # Add all deleted files to git staging
+        if deleted_files:
+            for file_path in deleted_files:
+                # Use 'git rm' for files that are tracked, or 'git add' for already deleted files
+                try:
+                    subprocess.run(
+                        ['git', 'rm', '--cached', file_path],
+                        check=True,
+                        cwd=str(repo_path),
+                        capture_output=True,
+                        text=True
+                    )
+                except subprocess.CalledProcessError:
+                    # File might already be deleted, try to stage the deletion
+                    subprocess.run(
+                        ['git', 'add', file_path],
+                        check=True,
+                        cwd=str(repo_path),
+                        capture_output=True,
+                        text=True
+                    )
 
         # Check if there are any changes to commit
         status = subprocess.run(
@@ -391,11 +452,19 @@ def process_vehicle_repo(args, template_repo_path, vehicle_repo_path):
     print(f"Processing {repo_name}...")
 
     try:
-        # Copy template files
-        copied_files = copy_template_files(template_repo_path, vehicle_repo_path, args.files)
+        copied_files = []
+        deleted_files = []
 
-        if not copied_files:
-            print(f"No files were copied to {repo_name}")
+        # Handle file deletions if --delete flag is provided
+        if args.delete:
+            deleted_files = delete_files(vehicle_repo_path, args.delete)
+
+        # Handle file copying if --files flag is provided
+        if args.files:
+            copied_files = copy_template_files(template_repo_path, vehicle_repo_path, args.files)
+
+        if not copied_files and not deleted_files:
+            print(f"No files were copied or deleted in {repo_name}")
             return repo_name, False
 
         # Create branch and PR
@@ -407,7 +476,8 @@ def process_vehicle_repo(args, template_repo_path, vehicle_repo_path):
             copied_files,
             branch_name,
             args.title,
-            args.body
+            args.body,
+            deleted_files
         )
 
         if not pr_url:
@@ -427,13 +497,18 @@ def main():
     parser = argparse.ArgumentParser(description='Propagate template files to vehicle repositories')
     parser.add_argument('--org', default='OBDb', help='GitHub organization name')
     parser.add_argument('--workspace', default='workspace', help='Workspace directory containing repositories')
-    parser.add_argument('--files', nargs='+', required=True, help='Files or directories to copy from template')
+    parser.add_argument('--files', nargs='+', help='Files or directories to copy from template')
+    parser.add_argument('--delete', nargs='+', help='Files or directories to delete from vehicle repositories')
     parser.add_argument('--branch', default='template-update', help='Branch name for PR')
     parser.add_argument('--title', default='Update from template repository', help='PR title')
     parser.add_argument('--body', default='This PR updates files from the template repository.', help='PR description')
     parser.add_argument('--filter-prefix', action='append', help='Filter repositories by prefix')
     parser.add_argument('--watch', action='store_true', help='Watch PRs until they are merged or closed')
     args = parser.parse_args()
+
+    # Validate that at least one of --files or --delete is provided
+    if not args.files and not args.delete:
+        parser.error('At least one of --files or --delete must be specified')
 
     try:
         # Ensure workspace directory exists
@@ -444,8 +519,10 @@ def main():
         if not workspace_dir.is_absolute():
             workspace_dir = Path.cwd() / workspace_dir
 
-        # Ensure template repo is cloned and up-to-date
-        template_repo_path = ensure_template_repo(args.org, workspace_dir)
+        # Only ensure template repo exists if we're copying files
+        template_repo_path = None
+        if args.files:
+            template_repo_path = ensure_template_repo(args.org, workspace_dir)
 
         # Get vehicle repos (filtering if requested)
         all_vehicle_repos = get_vehicle_repos(workspace_dir)
