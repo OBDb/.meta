@@ -100,7 +100,9 @@ def clone_repos(org_name, workspace_dir, filter_prefixes=None, use_ssh=False):
         # Find repos that match any of the specified prefixes
         prefix_filtered_repos = []
         for repo in filtered_repos:
-            if any(repo.startswith(prefix) for prefix in filter_prefixes):
+            # Repo names differ in case from the make spellings that name
+            # families (Seat-Ibiza under SEAT-, FIAT-500 under Fiat-).
+            if any(repo.casefold().startswith(prefix.casefold()) for prefix in filter_prefixes):
                 prefix_filtered_repos.append(repo)
 
         filtered_repos = prefix_filtered_repos

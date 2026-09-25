@@ -94,11 +94,11 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, f
 
             # Skip repositories that don't match the current filter group
             if group_filters:  # If we have filters in this group
-                if not any(repo_dir.name.startswith(prefix) for prefix in group_filters):
+                if not any(repo_dir.name.casefold().startswith(prefix.casefold()) for prefix in group_filters):
                     continue
 
             # Skip repositories that match any exclusion pattern
-            if filter_prefix_exclusions and any(repo_dir.name.startswith(prefix) for prefix in filter_prefix_exclusions):
+            if filter_prefix_exclusions and any(repo_dir.name.casefold().startswith(prefix.casefold()) for prefix in filter_prefix_exclusions):
                 print(f"Excluding {repo_dir.name} based on exclusion filter")
                 continue
 
