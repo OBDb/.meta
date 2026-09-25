@@ -368,7 +368,7 @@ def main():
             all_vehicle_repos = get_vehicle_repos(workspace_dir)
 
             if args.filter_prefix:
-                vehicle_repos = [repo for repo in all_vehicle_repos if any(repo.name.startswith(prefix) for prefix in args.filter_prefix)]
+                vehicle_repos = [repo for repo in all_vehicle_repos if any(repo.name.casefold().startswith(prefix.casefold()) for prefix in args.filter_prefix)]
                 print(f"Filtered to {len(vehicle_repos)} repositories starting with any of: {', '.join(args.filter_prefix)}")
             else:
                 vehicle_repos = all_vehicle_repos
