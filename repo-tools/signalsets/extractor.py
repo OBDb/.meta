@@ -6,6 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from .ecu import merge_ecu_entries
 from .processor import merge_signalsets, ensure_unique_signal_ids
 from .provenance import generate_provenance_report
 from .utils import are_signals_equal, calculate_hash, get_command_id
@@ -65,6 +66,7 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, f
     # Track signal origins throughout the merging process
     global_signal_origins = {}
     global_command_origins = {}
+    ecu_entries_by_repo = {}
 
     temp_output_path = Path(output_dir) / 'merged_signalset_temp.json'
     final_output_path = Path(output_dir) / 'merged_signalset.json'
@@ -162,6 +164,8 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, f
                 # Remove the signal origins metadata from the repo signalset before merging
                 del repo_signalset["_signal_origins"]
 
+            ecu_entries_by_repo[repo_name] = repo_signalset.pop("ecu", [])
+
             # Process and track commands from this repo
             for cmd in repo_signalset.get("commands", []):
                 cmd_id = get_command_id(cmd)
@@ -229,6 +233,11 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, f
     # Print summary of all repositories processed
     print(f"\nProcessed {len(all_repos)} repositories in {len(repo_groups)} filter groups")
 
+    ecu_entries, dropped_ecu_entries = merge_ecu_entries(ecu_entries_by_repo)
+    if ecu_entries:
+        merged_signalset["ecu"] = ecu_entries
+    print(f"Kept {len(ecu_entries)} ecu entries; dropped {len(dropped_ecu_entries)} addresses models disagree on")
+
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
 
@@ -269,7 +278,10 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, f
 
     # Generate the provenance report
     print(f"Generating signal provenance report...")
-    report, summary_path = generate_provenance_report(global_signal_origins, global_command_origins, provenance_report_path)
+    report, summary_path = generate_provenance_report(
+        global_signal_origins, global_command_origins, provenance_report_path,
+        ecu_report={"kept": ecu_entries, "dropped": dropped_ecu_entries},
+    )
 
     signal_count = len(global_signal_origins)
     command_count = len(global_command_origins)

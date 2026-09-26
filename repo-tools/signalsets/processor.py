@@ -46,6 +46,9 @@ def process_signalsets(loaded_signalsets, make, model, signal_prefix=None):
         if years:
             source_info["yearRange"] = {"start": years[0], "end": years[1]}
 
+        if signalset_data.get('ecu'):
+            merged_signalset.setdefault('ecu', []).extend(signalset_data['ecu'])
+
         # Process commands
         for cmd in signalset_data.get('commands', []):
             # Create a unique identifier for this command
