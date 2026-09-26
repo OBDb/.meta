@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-def generate_provenance_report(signal_origins, cmd_origins, output_path):
+def generate_provenance_report(signal_origins, cmd_origins, output_path, ecu_report=None):
     """
     Generate a GitHub Actions-friendly report showing which vehicle repositories
     contributed to which signals and commands in the merged result.
@@ -11,6 +11,8 @@ def generate_provenance_report(signal_origins, cmd_origins, output_path):
         signal_origins: Dictionary mapping signal IDs to their source information
         cmd_origins: Dictionary mapping command IDs to their source information
         output_path: Path to save the report
+        ecu_report: Optional dictionary of the ecu entries kept and the
+            addresses dropped because model repos disagree on them
     """
     # Generate a detailed report
     report = {
@@ -181,6 +183,17 @@ def generate_provenance_report(signal_origins, cmd_origins, output_path):
         repo_list = ", ".join(unique_links)
         description = data["description"][:50] + "..." if len(data["description"]) > 50 else data["description"]
         summary.append(f"| `{cmd_id}` | {description} | {repo_list} | {len(data['sources'])} |")
+
+    if ecu_report is not None:
+        report["ecu"] = ecu_report
+        summary.append("\n## ECU mappings dropped")
+        summary.append("\nModel repos give these addresses different types, so the make repo leaves them unmapped:")
+        summary.append("\n| Address | Types by repository |")
+        summary.append("| --- | --- |")
+        for entry in ecu_report["dropped"]:
+            address = ".".join(entry[k] for k in ("hdr", "eax", "rax") if k in entry)
+            types = "; ".join(f"{repo}: {', '.join(t)}" for repo, t in entry["types"].items())
+            summary.append(f"| `{address}` | {types} |")
 
     # Note about full report
     summary.append(f"\n\nFor complete details, see the full JSON report at `{output_path}`")
