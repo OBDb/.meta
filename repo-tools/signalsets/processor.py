@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 
+from .synthetics import SignalAliases, collect_synthetics
 from .utils import are_signals_equal, replace_signal_prefix, extract_year_range_from_filename, get_command_id
 
 def process_signalsets(loaded_signalsets, make, model, signal_prefix=None):
@@ -31,6 +32,11 @@ def process_signalsets(loaded_signalsets, make, model, signal_prefix=None):
 
     # Track which commands a signal appears in to avoid dropping duplicates used in different commands
     signal_command_usage = {}  # Maps signal ID to set of command IDs it appears in
+
+    # For carrying synthetics: each signal's original ID to the object merged
+    # for it, and which kept object stands in for each dropped one.
+    signal_objects = {}
+    aliases = SignalAliases()
 
     for signalset_data, filename in loaded_signalsets:
         # Track source file
@@ -71,6 +77,8 @@ def process_signalsets(loaded_signalsets, make, model, signal_prefix=None):
                 new_signals = []
                 for signal in cmd['signals']:
                     original_id = signal.get('id', '')
+                    if original_id and original_id not in signal_objects:
+                        signal_objects[original_id] = signal
 
                     if original_id:
                         # Replace the prefix in the signal ID if needed
@@ -100,6 +108,8 @@ def process_signalsets(loaded_signalsets, make, model, signal_prefix=None):
 
                                 if not signal_already_in_command:
                                     new_signals.append(signal)
+                                else:
+                                    aliases.record(signal, signal_registry[base_id])
                                 continue
                             else:
                                 # Register the new versioned signal
@@ -136,6 +146,8 @@ def process_signalsets(loaded_signalsets, make, model, signal_prefix=None):
                     signal_id = signal.get('id')
                     if signal_id not in existing_signals:
                         existing_cmd.setdefault('signals', []).append(signal)
+                    else:
+                        aliases.record(signal, existing_signals[signal_id])
             else:
                 # Add new command
                 command_map[cmd_id] = cmd
@@ -143,6 +155,17 @@ def process_signalsets(loaded_signalsets, make, model, signal_prefix=None):
 
     # Add signal origins to the result
     merged_signalset["_signal_origins"] = signal_origins
+
+    # Synthetics may read signals from any of the repo's files, so they are
+    # collected once every file's signals are merged.
+    synthetics = []
+    for signalset_data, _ in loaded_signalsets:
+        synthetics.extend(collect_synthetics(signalset_data, signal_objects, signal_prefix))
+    # A repo's aliases only matter to its own synthetics, so a repo without
+    # synthetics merges exactly as it did before they were carried.
+    if synthetics:
+        merged_signalset["_synthetics"] = synthetics
+        merged_signalset["_aliases"] = aliases
 
     return merged_signalset
 

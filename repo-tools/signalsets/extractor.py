@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from .ecu import merge_ecu_entries
+from .synthetics import SignalAliases, resolve_synthetics
 from .processor import merge_signalsets, ensure_unique_signal_ids
 from .provenance import generate_provenance_report
 from .utils import are_signals_equal, calculate_hash, get_command_id
@@ -67,6 +68,8 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, f
     global_signal_origins = {}
     global_command_origins = {}
     ecu_entries_by_repo = {}
+    collected_synthetics = []
+    aliases = SignalAliases()
 
     temp_output_path = Path(output_dir) / 'merged_signalset_temp.json'
     final_output_path = Path(output_dir) / 'merged_signalset.json'
@@ -165,6 +168,8 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, f
                 del repo_signalset["_signal_origins"]
 
             ecu_entries_by_repo[repo_name] = repo_signalset.pop("ecu", [])
+            collected_synthetics.extend(repo_signalset.pop("_synthetics", []))
+            aliases.update(repo_signalset.pop("_aliases", SignalAliases()))
 
             # Process and track commands from this repo
             for cmd in repo_signalset.get("commands", []):
@@ -209,8 +214,9 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, f
                     # Command exists, merge signals
                     existing_cmd = merged_signalset["commands"][command_map[cmd_id]]
 
-                    # Create a set of existing signal IDs for faster lookup
-                    existing_signal_ids = {s.get('id') for s in existing_cmd.get('signals', [])}
+                    # Existing signals by ID, for lookup and for aliasing a dropped duplicate
+                    existing_signals_by_id = {s.get('id'): s for s in existing_cmd.get('signals', [])}
+                    existing_signal_ids = set(existing_signals_by_id)
 
                     # Add any new signals from this command
                     for signal in cmd.get('signals', []):
@@ -220,12 +226,17 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, f
                                 existing_cmd['signals'] = []
 
                             # If the existing command contains a signal that is equal to this one, skip it
-                            if any(are_signals_equal(signal, s) for s in existing_cmd['signals']):
+                            equal = next((s for s in existing_cmd['signals'] if are_signals_equal(signal, s)), None)
+                            if equal is not None:
                                 print(f"Skipping duplicate signal {signal_id} in command {cmd_id}")
+                                aliases.record(signal, equal)
                                 continue
 
                             existing_cmd['signals'].append(signal)
                             existing_signal_ids.add(signal_id)
+                            existing_signals_by_id[signal_id] = signal
+                        elif signal_id in existing_signals_by_id:
+                            aliases.record(signal, existing_signals_by_id[signal_id])
                 else:
                     # Command doesn't exist, add it
                     merged_signalset["commands"].append(cmd)
@@ -244,6 +255,12 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, f
     # Ensure unique signal IDs
     print("Ensuring globally unique signal IDs...")
     merged_signalset = ensure_unique_signal_ids(merged_signalset)
+
+    # Synthetics resolve to the signals' final IDs, so only after renaming.
+    synthetics = resolve_synthetics(collected_synthetics, aliases)
+    if synthetics:
+        merged_signalset["synthetics"] = synthetics
+    print(f"Carried {len(synthetics)} synthetics")
 
     # Check if we need to update the file
     current_hash = calculate_hash(merged_signalset)
