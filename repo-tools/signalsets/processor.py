@@ -49,6 +49,9 @@ def process_signalsets(loaded_signalsets, make, model, signal_prefix=None):
         if signalset_data.get('ecu'):
             merged_signalset.setdefault('ecu', []).extend(signalset_data['ecu'])
 
+        if signalset_data.get('notice'):
+            merged_signalset.setdefault('notice', signalset_data['notice'])
+
         # Process commands
         for cmd in signalset_data.get('commands', []):
             # Create a unique identifier for this command
