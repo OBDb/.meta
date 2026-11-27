@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+from collections import Counter
 import os
 import shutil
 import subprocess
@@ -67,6 +68,7 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, f
     global_signal_origins = {}
     global_command_origins = {}
     ecu_entries_by_repo = {}
+    notices = Counter()
 
     temp_output_path = Path(output_dir) / 'merged_signalset_temp.json'
     final_output_path = Path(output_dir) / 'merged_signalset.json'
@@ -165,6 +167,9 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, f
                 del repo_signalset["_signal_origins"]
 
             ecu_entries_by_repo[repo_name] = repo_signalset.pop("ecu", [])
+            notice = repo_signalset.pop("notice", None)
+            if notice:
+                notices[notice] += 1
 
             # Process and track commands from this repo
             for cmd in repo_signalset.get("commands", []):
@@ -232,6 +237,11 @@ def extract_data(workspace_dir, output_dir, force=False, filter_prefixes=None, f
 
     # Print summary of all repositories processed
     print(f"\nProcessed {len(all_repos)} repositories in {len(repo_groups)} filter groups")
+
+    # The make repo tells its readers what its models do. While a change to
+    # the notice is still reaching every model, the most common one wins.
+    if notices:
+        merged_signalset["notice"] = notices.most_common(1)[0][0]
 
     ecu_entries, dropped_ecu_entries = merge_ecu_entries(ecu_entries_by_repo)
     if ecu_entries:
